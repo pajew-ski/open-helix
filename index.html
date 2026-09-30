@@ -1,0 +1,1355 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>open helix</title>
+  <meta name="description" content="Shepard-Risset-Glissando im Browser: der endlos steigende (oder fallende) Ton, komplett parametrisierbar, in Echtzeit synthetisiert.">
+  <link rel="icon" href="data:,">
+  <style>
+    /* Design-Tokens aus open entrainer: streng achromatisch (oklch, Chroma 0),
+       Hell und Dunkel teilen eine Skala. Abstände sind die Fibonacci-Folge,
+       die Schriftskala Potenzen von φ. */
+
+    :root {
+      color-scheme: light dark;
+      box-sizing: border-box;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+
+      --bg: oklch(98% 0 0);
+      --surface: oklch(94% 0 0);
+      --border: oklch(85% 0 0);
+      --text: oklch(15% 0 0);
+      --text-muted: oklch(40% 0 0);
+
+      --space-1: 5px;
+      --space-2: 8px;
+      --space-3: 13px;
+      --space-4: 21px;
+      --space-5: 34px;
+      --space-6: 55px;
+      --space-7: 89px;
+      --radius-sm: var(--space-1);
+      --radius-md: var(--space-2);
+      --radius-lg: var(--space-3);
+
+      --text-sm: 0.875rem;
+      --text-base: 1rem;
+      --text-lg: 1.618rem;
+      --text-xl: 2.618rem;
+      --text-2xl: 4.236rem;
+
+      font-family: system-ui, sans-serif;
+      font-size: var(--text-base);
+      line-height: 1.618;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: oklch(15% 0 0);
+        --surface: oklch(20% 0 0);
+        --border: oklch(30% 0 0);
+        --text: oklch(95% 0 0);
+        --text-muted: oklch(70% 0 0);
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --bg: oklch(15% 0 0);
+      --surface: oklch(20% 0 0);
+      --border: oklch(30% 0 0);
+      --text: oklch(95% 0 0);
+      --text-muted: oklch(70% 0 0);
+    }
+
+    html {
+      scroll-padding-top: env(safe-area-inset-top, 0px);
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    [hidden] { display: none !important; }
+
+    .shell {
+      max-width: 987px;
+      margin: 0 auto;
+      padding: 0 var(--space-4);
+    }
+
+    a { color: inherit; text-underline-offset: 3px; }
+    :focus-visible { outline: 2px solid var(--text-muted); outline-offset: 2px; }
+
+    /* Hero */
+
+    .hero { padding-block: var(--space-6) var(--space-4); }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(var(--text-xl), 9vw, var(--text-2xl));
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .hero p {
+      margin: var(--space-3) 0 0;
+      max-width: 34rem;
+      color: var(--text-muted);
+    }
+
+    main section { margin: 0 0 var(--space-7); }
+    main h2 {
+      margin: 0 0 var(--space-4);
+      font-size: var(--text-lg);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    main h3 {
+      margin: 0 0 var(--space-1);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+    }
+    main section > p, main section > ul { margin: 0 0 var(--space-3); max-width: 42rem; }
+    main section > ul { padding-left: var(--space-4); }
+    main section > ul li { margin-bottom: var(--space-1); }
+    .caption { color: var(--text-muted); font-size: var(--text-sm); margin: 0; }
+
+    /* Visualisierung: Spektrogramm links, Hüllkurve rechts, beide teilen die
+       logarithmische Frequenzachse. */
+
+    .viz {
+      display: grid;
+      grid-template-columns: 1fr 144px;
+      height: clamp(300px, 40vw, 420px);
+      margin: 0 0 var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .viz-main { position: relative; min-width: 0; }
+    .viz canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      color: var(--text);
+      border-color: var(--border);
+      outline-color: var(--text-muted);
+    }
+    .viz-main canvas { position: absolute; inset: 0; }
+    #envc { border-left: 1px solid var(--border); }
+
+    .hud {
+      position: absolute;
+      top: var(--space-3);
+      display: flex;
+      flex-direction: column;
+      pointer-events: none;
+      font-variant-numeric: tabular-nums;
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-sm);
+      background: color-mix(in oklch, var(--surface) 78%, transparent);
+    }
+    .hud-left { left: var(--space-3); }
+    .hud-right { right: var(--space-3); text-align: right; }
+    .hud-label { font-size: var(--text-sm); color: var(--text-muted); }
+    .hud-value { font-size: var(--text-lg); font-weight: 600; line-height: 1.2; }
+    .hud-small { font-size: var(--text-sm); color: var(--text-muted); }
+
+    @media (max-width: 600px) {
+      .viz { grid-template-columns: 1fr 89px; }
+      .hud-value { font-size: var(--text-base); }
+    }
+
+    /* Presets */
+
+    .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-4); }
+
+    /* Bedienelemente */
+
+    .button, .chip, .seg button {
+      font: inherit;
+      font-size: var(--text-sm);
+      color: var(--text);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-2) var(--space-4);
+      cursor: pointer;
+    }
+    .chip { padding: var(--space-1) var(--space-3); }
+    .button:hover, .chip:hover, .seg button:hover { background: var(--surface); }
+    .button:disabled { color: var(--text-muted); cursor: default; background: none; }
+    .button.primary, .seg button[aria-pressed="true"] {
+      color: var(--bg);
+      background: var(--text);
+      border-color: var(--text);
+    }
+    .button.primary:hover { background: var(--text-muted); border-color: var(--text-muted); }
+    .button.primary:disabled { background: var(--border); border-color: var(--border); color: var(--text-muted); }
+
+    .seg { display: flex; gap: 0; }
+    .seg button { flex: 1; padding: var(--space-1) var(--space-2); border-radius: 0; margin-left: -1px; }
+    .seg button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); margin-left: 0; }
+    .seg button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+
+    .panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(233px, 1fr));
+      gap: var(--space-4);
+    }
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+
+    .control { display: block; }
+    .control.dim { opacity: 0.4; }
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-3);
+      font-size: var(--text-sm);
+      margin-bottom: var(--space-1);
+    }
+    .control-label output { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .control .chips { margin: var(--space-2) 0 0; gap: var(--space-1); }
+
+    input[type="range"] { display: block; width: 100%; margin: 0; accent-color: var(--text); }
+    select {
+      font: inherit;
+      font-size: var(--text-sm);
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-1) var(--space-2);
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* Dock: Transport bleibt beim Einstellen im Bild */
+
+    .dock {
+      position: sticky;
+      bottom: 0;
+      z-index: 5;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: var(--space-3) 0 calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    }
+    .dock .shell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
+    .dock .transport { display: flex; gap: var(--space-2); }
+    .dock .clock { font-size: var(--text-sm); color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 8ch; }
+    .dock .control { flex: 1 1 233px; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: var(--space-5) 0 var(--space-6);
+      color: var(--text-muted);
+      font-size: var(--text-sm);
+    }
+  </style>
+</head>
+<body>
+  <header class="hero shell">
+    <h1>open helix</h1>
+    <p>Ein Ton, der immer weiter steigt und nie oben ankommt. Alle Parameter des Shepard-Risset-Glissandos einstellbar, in Echtzeit im Browser erzeugt.</p>
+  </header>
+
+  <main class="shell">
+    <section id="session">
+      <div class="viz">
+        <div class="viz-main">
+          <canvas id="spec" aria-label="Spektrogramm: Frequenz logarithmisch von unten nach oben, Zeit von links nach rechts"></canvas>
+          <canvas id="axis" aria-hidden="true"></canvas>
+          <div class="hud hud-left">
+            <span class="hud-label">Zustand</span>
+            <span id="state" class="hud-value">Bereit</span>
+            <span id="hud-clock" class="hud-small">00:00</span>
+          </div>
+          <div class="hud hud-right">
+            <span class="hud-label">Lauf</span>
+            <span id="hud-rate" class="hud-value">aufwärts</span>
+            <span id="hud-range" class="hud-small">31 Hz bis 8 kHz</span>
+          </div>
+        </div>
+        <canvas id="envc" aria-label="Hüllkurve mit den aktuellen Komponenten"></canvas>
+      </div>
+
+      <div class="chips" id="presets"></div>
+      <div class="panels" id="panels"></div>
+    </section>
+
+    <section id="how">
+      <h2>Wie es funktioniert</h2>
+      <p>Mehrere Sinustöne im festen Abstand steigen gleichzeitig. Eine Glockenkurve über der logarithmischen Frequenzachse blendet sie unten ein und oben aus. Wenn der höchste verschwindet, erscheint unten ein neuer: die Tonhöhenklasse wandert immer weiter, die absolute Lage bleibt. Im Spektrogramm sind das die diagonalen Streifen. Gleitend heißt das Shepard-Risset-Glissando, in Stufen Shepard-Skala.</p>
+      <p>Der Abstand muss keine Oktave sein. Bei jedem anderen Intervall entsteht ein Muster, das sich erst nach diesem Intervall wiederholt. Der binaurale Beat legt die Töne links und rechts um die eingestellte Differenz auseinander und braucht Kopfhörer.</p>
+    </section>
+
+    <section id="before">
+      <h2>Vorher</h2>
+      <ul>
+        <li>Leise beginnen. Der Effekt braucht keine Lautstärke, und schnelle Läufe mit vielen Komponenten wirken intensiver als erwartet.</li>
+        <li>Nicht beim Fahren oder an Maschinen benutzen.</li>
+        <li>Bei Epilepsie, Herzschrittmacher oder psychischer Erkrankung vorher ärztlich klären. Kein Medizinprodukt.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell">
+      open helix · nach der Idee von <a href="https://github.com/pajew-ski/open-entrainer">open entrainer</a> · Unlicense · <span id="engine">Engine: nicht gestartet</span>
+    </div>
+  </footer>
+
+  <div class="dock">
+    <div class="shell">
+      <div class="transport">
+        <button type="button" id="btn-play" class="button primary">Start</button>
+        <button type="button" id="btn-pause" class="button" disabled>Pause</button>
+        <button type="button" id="btn-stop" class="button" disabled>Stopp</button>
+      </div>
+      <span id="dock-clock" class="clock">00:00</span>
+      <div id="dock-master" class="control"></div>
+    </div>
+  </div>
+
+  <script>
+    // open helix
+    // Eine Datei, keine Abhängigkeiten. Die Synthese läuft als AudioWorklet
+    // (Fallback: ScriptProcessor), das Bild wird aus dem Zustand der Engine
+    // gezeichnet.
+
+    // ==ENGINE==
+    function mod(x, m) { return x - m * Math.floor(x / m); }
+
+    // Hüllkurve über der normierten Position x in [0,1] der Spanne. An beiden
+    // Rändern 0, damit der Sprung von oben nach unten unhörbar bleibt.
+    function envelope(P, x) {
+      if (x <= 0 || x >= 1) return 0;
+      switch (P.env) {
+        case 0: return 0.5 - 0.5 * Math.cos(6.283185307179586 * x);
+        case 1: {
+          const s = 0.05 + 0.3 * P.shape;
+          const g = (u) => Math.exp(-0.5 * ((u - 0.5) / s) * ((u - 0.5) / s));
+          const e0 = g(0);
+          return (g(x) - e0) / (1 - e0);
+        }
+        case 2: return 1 - Math.abs(2 * x - 1);
+        default: {
+          const t = Math.max(0.05, P.shape);
+          if (x < t / 2) return 0.5 - 0.5 * Math.cos(6.283185307179586 * x / t);
+          if (x > 1 - t / 2) return 0.5 - 0.5 * Math.cos(6.283185307179586 * (1 - x) / t);
+          return 1;
+        }
+      }
+    }
+
+    function makeEngine(sr) {
+      const TAU = 6.283185307179586, MAXN = 24, B = 64;
+      const P = {
+        dir: 1, secPerOct: 12, pendel: 60, steps: 0, glide: 0.35, accel: 0,
+        tmDepth: 0, tmPeriod: 20, n: 8, spacing: 1200, fc: 440, env: 0,
+        shape: 0.5, tilt: 0, wave: 0, harm: 4, rolloff: 1.5, binaural: 0,
+        tremRate: 0, tremDepth: 0, tremPhase: 0, noise: 0, spread: 0,
+        apRate: 0, apDepth: 0,
+      };
+      const phL = new Float64Array(MAXN), phR = new Float64Array(MAXN);
+      const pgL = new Float64Array(MAXN), pgR = new Float64Array(MAXN);
+      const pil = new Float64Array(MAXN), pir = new Float64Array(MAXN);
+      const ppos = new Float64Array(MAXN);
+      const bufL = new Float64Array(B), bufR = new Float64Array(B);
+      const nz = new Float64Array(14);
+      let t = 0, graw = 0, acc = 1, tp = 0, ap = 0, nl = 0, norm = 0.1;
+      let sp = 1, span = 8, effLast = 0, rateLast = 0;
+      let hs = [1], hw = [1];
+
+      function tiltGain(x) { return P.tilt ? Math.pow(10, P.tilt * (x - 0.5) * span / 20) : 1; }
+
+      function recalc() {
+        const nn = Math.max(1, Math.min(MAXN, Math.round(P.n)));
+        sp = P.spacing / 1200;
+        span = nn * sp;
+        hs = []; hw = [];
+        const H = P.wave === 0 ? 1 : Math.max(1, Math.min(8, Math.round(P.harm)));
+        const stp = P.wave === 1 ? 2 : 1;
+        let ws = 0;
+        for (let i = 0, h = 1; i < H; i++, h += stp) {
+          hs.push(h);
+          const w = Math.pow(h, -P.rolloff);
+          hw.push(w);
+          ws += w * w;
+        }
+        // Mittlere Leistung über einen Zyklus, damit die Lautstärke nicht von
+        // Komponentenzahl, Hüllkurve und Klangfarbe abhängt.
+        let m = 0;
+        const J = 24;
+        for (let j = 0; j < J; j++) {
+          const e = j / J * sp;
+          for (let k = 0; k < nn; k++) {
+            const x = mod(e + k * sp, span) / span;
+            const a = envelope(P, x) * tiltGain(x);
+            m += a * a;
+          }
+        }
+        m /= J;
+        norm = 0.25 / Math.sqrt(Math.max(0.5 * m * ws, 1e-4));
+      }
+
+      function pink(o) {
+        const w = Math.random() * 2 - 1;
+        nz[o] = 0.99886 * nz[o] + w * 0.0555179;
+        nz[o + 1] = 0.99332 * nz[o + 1] + w * 0.0750759;
+        nz[o + 2] = 0.969 * nz[o + 2] + w * 0.153852;
+        nz[o + 3] = 0.8665 * nz[o + 3] + w * 0.3104856;
+        nz[o + 4] = 0.55 * nz[o + 4] + w * 0.5329522;
+        nz[o + 5] = -0.7616 * nz[o + 5] - w * 0.016898;
+        const p = nz[o] + nz[o + 1] + nz[o + 2] + nz[o + 3] + nz[o + 4] + nz[o + 5] + nz[o + 6] + w * 0.5362;
+        nz[o + 6] = w * 0.115926;
+        return p * 0.11;
+      }
+
+      function block(m) {
+        const dt = m / sr;
+        // Bewegung
+        const dirF = P.dir === 0 ? Math.sin(TAU * t / Math.max(1, P.pendel)) : P.dir;
+        const tmod = 1 + P.tmDepth * Math.sin(TAU * t / Math.max(1, P.tmPeriod));
+        acc = Math.min(16, Math.max(1 / 16, acc * Math.pow(1 + P.accel / 100, dt / 60)));
+        const rate = dirF * tmod * acc / Math.max(0.05, P.secPerOct);
+        graw += rate * dt;
+        t += dt;
+        rateLast = rate;
+
+        let eff = graw;
+        if (P.steps >= 1) {
+          const s = Math.round(P.steps), u = graw * s, fl = Math.floor(u), f = u - fl;
+          const w = Math.min(1, Math.max(0.02, P.glide));
+          let sm;
+          if (w >= 1) sm = f;
+          else { const q = (f - (1 - w)) / w; sm = q <= 0 ? 0 : q * q * (3 - 2 * q); }
+          eff = (fl + sm) / s;
+        }
+        effLast = eff;
+
+        const nn = Math.max(1, Math.min(MAXN, Math.round(P.n)));
+        const b = P.binaural, bin = b > 0;
+        const nyq = sr * 0.45;
+        bufL.fill(0); bufR.fill(0);
+
+        for (let k = 0; k < MAXN; k++) {
+          let gLt = 0, gRt = 0, ilt = pil[k], irt = pir[k];
+          if (k < nn) {
+            const pos = mod(eff + k * sp, span), x = pos / span;
+            const f = P.fc * Math.pow(2, pos - span / 2);
+            if (Math.abs(pos - ppos[k]) > span * 0.5) {
+              // Sprung von oben nach unten: Amplitude ist dort 0, die
+              // Frequenz darf sofort auf den neuen Wert.
+              pil[k] = Math.max(1e-5, (f - b / 2) / sr);
+              pir[k] = Math.max(1e-5, (f + b / 2) / sr);
+            }
+            ppos[k] = pos;
+            let a = envelope(P, x) * norm * tiltGain(x);
+            if (f > nyq) a = 0; else if (f > nyq * 0.9) a *= (nyq - f) / (nyq * 0.1);
+            if (f < 16) a *= Math.max(0, (f - 8) / 8);
+            const ang = Math.min(1, Math.max(-1, P.spread * (2 * x - 1) + P.apDepth * Math.sin(ap + x * Math.PI)));
+            const th = (ang + 1) * Math.PI / 4;
+            gLt = a * Math.SQRT2 * Math.cos(th);
+            gRt = a * Math.SQRT2 * Math.sin(th);
+            ilt = Math.max(1e-5, (f - b / 2) / sr);
+            irt = Math.max(1e-5, (f + b / 2) / sr);
+          }
+          if (gLt < 1e-7 && gRt < 1e-7 && pgL[k] < 1e-7 && pgR[k] < 1e-7) {
+            pgL[k] = 0; pgR[k] = 0; pil[k] = ilt; pir[k] = irt;
+            continue;
+          }
+          let hv = 0;
+          for (let i = 0; i < hs.length; i++) if (hs[i] * Math.max(ilt, irt) < 0.45) hv++;
+          if (hv < 1) hv = 1;
+
+          let pl = phL[k], pr = bin ? phR[k] : pl;
+          let gl = pgL[k], gr = pgR[k], il = pil[k], ir = pir[k];
+          const dgl = (gLt - gl) / m, dgr = (gRt - gr) / m;
+          const dil = (ilt - il) / m, dir = (irt - ir) / m;
+          for (let i = 0; i < m; i++) {
+            pl += il; if (pl >= 1) pl -= 1;
+            let sL, sR;
+            if (hv === 1) {
+              sL = Math.sin(TAU * pl);
+              if (bin) { pr += ir; if (pr >= 1) pr -= 1; sR = Math.sin(TAU * pr); } else sR = sL;
+            } else {
+              sL = 0;
+              for (let h = 0; h < hv; h++) sL += hw[h] * Math.sin(TAU * pl * hs[h]);
+              if (bin) {
+                pr += ir; if (pr >= 1) pr -= 1;
+                sR = 0;
+                for (let h = 0; h < hv; h++) sR += hw[h] * Math.sin(TAU * pr * hs[h]);
+              } else sR = sL;
+            }
+            bufL[i] += gl * sL; bufR[i] += gr * sR;
+            gl += dgl; gr += dgr; il += dil; ir += dir;
+          }
+          phL[k] = pl; phR[k] = bin ? pr : pl;
+          pgL[k] = gLt; pgR[k] = gRt; pil[k] = ilt; pir[k] = irt;
+        }
+
+        // Tremolo, Rauschen, Begrenzer
+        const trem = P.tremDepth > 0;
+        const tstep = P.tremRate / sr, toff = P.tremPhase / 360;
+        const ntg = P.noise;
+        for (let i = 0; i < m; i++) {
+          let tl = 1, tr = 1;
+          if (trem) {
+            tp += tstep;
+            tl = 1 - P.tremDepth * 0.5 * (1 - Math.cos(TAU * tp));
+            tr = 1 - P.tremDepth * 0.5 * (1 - Math.cos(TAU * (tp + toff)));
+          }
+          nl += (ntg - nl) * 0.002;
+          bufL[i] = Math.tanh(bufL[i] * tl + nl * pink(0));
+          bufR[i] = Math.tanh(bufR[i] * tr + nl * pink(7));
+        }
+        tp -= Math.floor(tp);
+        ap += TAU * P.apRate * dt;
+        if (ap > 1e6) ap -= 1e6 * Math.floor(ap / 1e6);
+      }
+
+      return {
+        set(p) { Object.assign(P, p); recalc(); },
+        reset() {
+          t = 0; graw = 0; acc = 1; tp = 0; ap = 0; nl = 0;
+          for (let k = 0; k < MAXN; k++) {
+            phL[k] = Math.random(); phR[k] = phL[k];
+            pgL[k] = 0; pgR[k] = 0; pil[k] = 0.01; pir[k] = 0.01; ppos[k] = 0;
+          }
+          nz.fill(0);
+        },
+        process(outL, outR, n) {
+          let off = 0;
+          while (off < n) {
+            const m = Math.min(B, n - off);
+            block(m);
+            for (let i = 0; i < m; i++) { outL[off + i] = bufL[i]; outR[off + i] = bufR[i]; }
+            off += m;
+          }
+        },
+        state() { return { g: mod(effLast, span), t, rate: rateLast }; },
+      };
+    }
+    // ==/ENGINE==
+
+    const WORKLET_SRC = `${mod.toString()}
+${envelope.toString()}
+${makeEngine.toString()}
+registerProcessor('helix', class extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.e = makeEngine(sampleRate);
+    this.c = 0;
+    this.port.onmessage = (m) => { if (m.data.p) this.e.set(m.data.p); if (m.data.reset) this.e.reset(); };
+  }
+  process(_, outs) {
+    const o = outs[0];
+    this.e.process(o[0], o[1] || o[0], o[0].length);
+    if ((this.c++ & 3) === 0) this.port.postMessage(this.e.state());
+    return true;
+  }
+});`;
+
+    // ---------------------------------------------------------------------
+    // Parameter
+
+    const $ = (id) => document.getElementById(id);
+    const fmtN = (v, d = 1) => v.toFixed(d).replace(".", ",");
+    const fmtHz = (f) => f >= 1000 ? `${fmtN(f / 1000, f >= 10000 ? 0 : 1)} kHz` : `${fmtN(f, f < 100 ? 1 : 0)} Hz`;
+    const pad = (n) => String(n).padStart(2, "0");
+    const clock = (s) => `${pad(Math.floor(s / 60))}:${pad(Math.floor(s % 60))}`;
+
+    const SCHEMA = [
+      { title: "Bewegung", items: [
+        { k: "dir", label: "Richtung", t: "seg", opts: [[1, "aufwärts"], [-1, "abwärts"], [0, "pendelnd"]], def: 1 },
+        { k: "secPerOct", label: "Zeit pro Oktave", t: "range", min: 0.5, max: 240, log: true, def: 12, f: (v) => `${fmtN(v, v < 10 ? 1 : 0)} s` },
+        { k: "pendel", label: "Pendelperiode", t: "range", min: 5, max: 600, log: true, def: 60, f: (v) => `${fmtN(v, 0)} s`, needs: (s) => s.dir === 0 },
+        { k: "steps", label: "Stufen pro Oktave", t: "range", min: 0, max: 24, step: 1, def: 0, f: (v) => v === 0 ? "gleitend" : `${v}` },
+        { k: "glide", label: "Stufenübergang", t: "range", min: 2, max: 100, step: 1, def: 35, f: (v) => `${v} %`, needs: (s) => s.steps >= 1 },
+        { k: "accel", label: "Beschleunigung", t: "range", min: -50, max: 100, step: 1, def: 0, f: (v) => `${v > 0 ? "+" : ""}${v} %/min` },
+        { k: "tmDepth", label: "Tempo-Schwingung, Tiefe", t: "range", min: 0, max: 90, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "tmPeriod", label: "Tempo-Schwingung, Periode", t: "range", min: 2, max: 120, log: true, def: 20, f: (v) => `${fmtN(v, 0)} s`, needs: (s) => s.tmDepth > 0 },
+      ] },
+      { title: "Struktur", items: [
+        { k: "n", label: "Komponenten", t: "range", min: 1, max: 24, step: 1, def: 8, f: (v) => `${v}` },
+        { k: "spacing", label: "Abstand", t: "range", min: 100, max: 2400, step: 1, def: 1200, f: (v) => `${v} ct`,
+          chips: [["Oktave", 1200], ["Quinte", 702], ["Quarte", 498], ["Terz", 386], ["Ganzton", 200], ["Halbton", 100]] },
+        { k: "fc", label: "Zentrum", t: "range", min: 40, max: 4000, log: true, def: 440, f: fmtHz },
+        { k: "env", label: "Hüllkurve", t: "select", opts: [[0, "Hann"], [1, "Gauß"], [2, "Dreieck"], [3, "Plateau"]], def: 0 },
+        { k: "shape", label: "Form der Hüllkurve", t: "range", min: 5, max: 100, step: 1, def: 50, f: (v) => `${v} %`, needs: (s) => s.env === 1 || s.env === 3 },
+        { k: "tilt", label: "Neigung", t: "range", min: -12, max: 12, step: 0.5, def: 0, f: (v) => `${v > 0 ? "+" : ""}${fmtN(v, 1)} dB/Okt` },
+        { info: "struct" },
+      ] },
+      { title: "Klang", items: [
+        { k: "wave", label: "Klangfarbe", t: "select", opts: [[0, "Sinus"], [1, "ungerade Obertöne"], [2, "alle Obertöne"]], def: 0 },
+        { k: "harm", label: "Obertöne", t: "range", min: 1, max: 8, step: 1, def: 4, f: (v) => `${v}`, needs: (s) => s.wave > 0 },
+        { k: "rolloff", label: "Oberton-Abfall", t: "range", min: 0, max: 3, step: 0.1, def: 1.5, f: (v) => `1/h^${fmtN(v, 1)}`, needs: (s) => s.wave > 0 },
+        { k: "binaural", label: "Binauraler Beat", t: "range", min: 0, max: 40, step: 0.1, def: 0, f: (v) => v === 0 ? "aus" : `${fmtN(v, 1)} Hz` },
+        { k: "tremRate", label: "Tremolo, Rate", t: "range", min: 0, max: 30, step: 0.1, def: 0, f: (v) => `${fmtN(v, 1)} Hz` },
+        { k: "tremDepth", label: "Tremolo, Tiefe", t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "tremPhase", label: "Tremolo, Phase L/R", t: "range", min: 0, max: 180, step: 1, def: 0, f: (v) => `${v}°`, needs: (s) => s.tremDepth > 0 },
+      ] },
+      { title: "Raum und Mix", items: [
+        { k: "spread", label: "Panorama nach Tonhöhe", t: "range", min: -100, max: 100, step: 1, def: 0, f: (v) => v === 0 ? "mittig" : v > 0 ? `tief links, ${v} %` : `tief rechts, ${-v} %` },
+        { k: "apRate", label: "Auto-Pan, Rate", t: "range", min: 0, max: 2, step: 0.01, def: 0, f: (v) => `${fmtN(v, 2)} Hz` },
+        { k: "apDepth", label: "Auto-Pan, Tiefe", t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "noise", label: "Rosa Rauschen", t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "hall", label: "Hall, Anteil", t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "hallLen", label: "Hall, Länge", t: "range", min: 0.5, max: 8, step: 0.1, def: 3, f: (v) => `${fmtN(v, 1)} s`, needs: (s) => s.hall > 0 },
+        { k: "hp", label: "Hochpass", t: "range", min: 20, max: 2000, log: true, def: 20, f: fmtHz },
+        { k: "lp", label: "Tiefpass", t: "range", min: 500, max: 20000, log: true, def: 20000, f: fmtHz },
+      ] },
+      { title: "Sitzung und Anzeige", items: [
+        { k: "dur", label: "Dauer", t: "range", min: 0, max: 180, step: 1, def: 0, f: (v) => v === 0 ? "unbegrenzt" : `${v} min` },
+        { k: "fadeIn", label: "Einblenden", t: "range", min: 0, max: 60, step: 1, def: 4, f: (v) => `${v} s` },
+        { k: "fadeOut", label: "Ausblenden", t: "range", min: 0, max: 60, step: 1, def: 4, f: (v) => `${v} s` },
+        { k: "view", label: "Ansicht", t: "seg", opts: [["model", "Modell"], ["fft", "Analyzer"]], def: "model" },
+        { k: "win", label: "Zeitfenster", t: "range", min: 10, max: 180, log: true, def: 40, f: (v) => `${fmtN(v, 0)} s` },
+      ] },
+    ];
+    const MASTER = { k: "master", label: "Lautstärke", t: "range", min: -60, max: 0, step: 1, def: -18, f: (v) => v <= -60 ? "aus" : `${v} dB` };
+
+    const ITEMS = [...SCHEMA.flatMap((g) => g.items.filter((i) => i.k)), MASTER];
+    const DEF = Object.fromEntries(ITEMS.map((i) => [i.k, i.def]));
+    const KEEP = new Set(["dur", "fadeIn", "fadeOut", "view", "win", "master"]);
+    const S = { ...DEF };
+
+    const PRESETS = [
+      ["Shepard-Risset", { dir: 1, secPerOct: 10, n: 8, spacing: 1200, fc: 500, env: 0 }],
+      ["Abwärts-Drone", { dir: -1, secPerOct: 24, n: 6, fc: 150, env: 1, shape: 50, tilt: -3, hall: 35, hallLen: 4.5, lp: 6000 }],
+      ["Riser", { dir: 1, secPerOct: 6, accel: 35, n: 10, fc: 700, wave: 2, harm: 5, rolloff: 1.6, hall: 25, hallLen: 2.5, lp: 9000 }],
+      ["Shepard-Skala", { dir: 1, secPerOct: 6, steps: 12, glide: 8, n: 8, fc: 500 }],
+      ["Trance", { dir: 1, secPerOct: 40, n: 8, fc: 220, binaural: 6, noise: 3, spread: 60, apRate: 0.05, apDepth: 40, hall: 30, hallLen: 5, lp: 7000 }],
+      ["Pendel", { dir: 0, pendel: 90, secPerOct: 12, n: 8, fc: 330, hall: 20 }],
+    ];
+
+    const STORE = "open-helix-v1";
+    function load() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
+        for (const k of Object.keys(DEF)) if (typeof saved[k] === typeof DEF[k]) S[k] = saved[k];
+      } catch { /* Speicher nicht verfügbar, Defaults gelten */ }
+    }
+    function save() {
+      try { localStorage.setItem(STORE, JSON.stringify(S)); } catch { /* egal */ }
+    }
+
+    function engineParams() {
+      return {
+        dir: S.dir, secPerOct: S.secPerOct, pendel: S.pendel, steps: S.steps, glide: S.glide / 100,
+        accel: S.accel, tmDepth: S.tmDepth / 100, tmPeriod: S.tmPeriod, n: S.n, spacing: S.spacing,
+        fc: S.fc, env: S.env, shape: S.shape / 100, tilt: S.tilt, wave: S.wave, harm: S.harm,
+        rolloff: S.rolloff, binaural: S.binaural, tremRate: S.tremRate, tremDepth: S.tremDepth / 100,
+        tremPhase: S.tremPhase, noise: S.noise / 100, spread: S.spread / 100, apRate: S.apRate,
+        apDepth: S.apDepth / 100,
+      };
+    }
+
+    // ---------------------------------------------------------------------
+    // UI aus dem Schema
+
+    const ctl = {};
+
+    function el(tag, attrs = {}, ...kids) {
+      const e = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        if (k === "class") e.className = v; else e.setAttribute(k, v);
+      }
+      for (const kid of kids) e.append(kid);
+      return e;
+    }
+
+    const roundLog = (v, it) => Math.min(it.max, Math.max(it.min, Number(v.toPrecision(3))));
+    const toSlider = (it, v) => it.log ? Math.round(Math.log(v / it.min) / Math.log(it.max / it.min) * 1000) : v;
+    const fromSlider = (it, s) => it.log ? roundLog(it.min * Math.pow(it.max / it.min, s / 1000), it) : Number(s);
+
+    function buildControl(it) {
+      const box = el("div", { class: "control" });
+      const out = el("output");
+      box.append(el("span", { class: "control-label" }, el("span", {}, it.label), out));
+      let setUI;
+      if (it.t === "range") {
+        const input = el("input", { type: "range", "aria-label": it.label });
+        if (it.log) { input.min = 0; input.max = 1000; input.step = 1; }
+        else { input.min = it.min; input.max = it.max; input.step = it.step; }
+        input.addEventListener("input", () => set(it.k, fromSlider(it, input.value), false));
+        box.append(input);
+        setUI = (v) => { input.value = toSlider(it, v); out.textContent = it.f(v); };
+      } else if (it.t === "select") {
+        const sel = el("select", { "aria-label": it.label });
+        for (const [v, l] of it.opts) sel.append(el("option", { value: v }, l));
+        sel.addEventListener("change", () => set(it.k, Number(sel.value), false));
+        box.append(sel);
+        out.hidden = true;
+        setUI = (v) => { sel.value = v; };
+      } else {
+        const grp = el("div", { class: "seg", role: "group", "aria-label": it.label });
+        const btns = it.opts.map(([v, l]) => {
+          const b = el("button", { type: "button" }, l);
+          b.addEventListener("click", () => set(it.k, v, false));
+          grp.append(b);
+          return [v, b];
+        });
+        box.append(grp);
+        out.hidden = true;
+        setUI = (v) => btns.forEach(([bv, b]) => b.setAttribute("aria-pressed", String(bv === v)));
+      }
+      if (it.chips) {
+        const row = el("div", { class: "chips" });
+        for (const [l, v] of it.chips) {
+          const c = el("button", { type: "button", class: "chip" }, l);
+          c.addEventListener("click", () => set(it.k, v, false));
+          row.append(c);
+        }
+        box.append(row);
+      }
+      ctl[it.k] = { it, box, setUI };
+      return box;
+    }
+
+    function buildUI() {
+      const host = $("panels");
+      for (const g of SCHEMA) {
+        const panel = el("div", { class: "panel" }, el("h3", {}, g.title));
+        for (const it of g.items) {
+          if (it.info) { panel.append(el("p", { class: "caption", id: "info-" + it.info })); continue; }
+          panel.append(buildControl(it));
+        }
+        host.append(panel);
+      }
+      $("dock-master").replaceWith(buildControl(MASTER));
+      ctl.master.box.id = "dock-master";
+
+      const row = $("presets");
+      for (const [name, vals] of PRESETS) {
+        const b = el("button", { type: "button", class: "chip" }, name);
+        b.addEventListener("click", () => applyPreset(vals));
+        row.append(b);
+      }
+      const reset = el("button", { type: "button", class: "chip" }, "Zurücksetzen");
+      reset.addEventListener("click", () => applyPreset({}));
+      row.append(reset);
+    }
+
+    function syncUI() {
+      for (const k of Object.keys(ctl)) {
+        const c = ctl[k];
+        c.setUI(S[k]);
+        if (c.it.needs) c.box.classList.toggle("dim", !c.it.needs(S));
+      }
+    }
+
+    function applyPreset(vals) {
+      for (const k of Object.keys(DEF)) if (!KEEP.has(k)) S[k] = DEF[k];
+      Object.assign(S, vals);
+      syncUI();
+      changed("*");
+    }
+
+    function set(k, v, silent) {
+      S[k] = v;
+      if (!silent) { ctl[k].setUI(v); changed(k); }
+    }
+
+    // ---------------------------------------------------------------------
+    // Abgeleitete Größen
+
+    const geo = { sp: 1, span: 8, lo: 0, hi: 0 };
+    const envP = { env: 0, shape: 0.5 };
+
+    function derive() {
+      geo.sp = S.spacing / 1200;
+      geo.span = S.n * geo.sp;
+      envP.env = S.env;
+      envP.shape = S.shape / 100;
+      const half = Math.log2(S.fc);
+      geo.lo = half - geo.span / 2;
+      geo.hi = half + geo.span / 2;
+      const flo = Math.pow(2, geo.lo), fhi = Math.pow(2, geo.hi);
+      $("info-struct").textContent = `Spanne ${fmtHz(flo)} bis ${fmtHz(fhi)}, Muster wiederholt sich nach ${fmtN(geo.sp * S.secPerOct, 1)} s.`;
+      $("hud-range").textContent = `${fmtHz(Math.max(20, flo))} bis ${fmtHz(Math.min(20000, fhi))}`;
+    }
+
+    // ---------------------------------------------------------------------
+    // Audio
+
+    const A = { ctx: null, node: null, proc: null, engine: null, fade: null, master: null, hp: null, lp: null,
+      dry: null, wet: null, conv: null, an: null, carrier: null, el: null, route: "", t0: 0, fading: false, irTimer: 0, timer: 0 };
+    const run = { playing: false, paused: false, starting: false };
+    let lastState = { g: 0, t: 0, rate: 0 };
+
+    function makeIR(ac, sec) {
+      const len = Math.max(1, Math.floor(ac.sampleRate * sec));
+      const buf = ac.createBuffer(2, len, ac.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const decay = Math.exp(-6.9 * i / len);
+          const c = 0.75 - 0.6 * (i / len);
+          lp += ((Math.random() * 2 - 1) - lp) * c;
+          d[i] = lp * decay;
+        }
+      }
+      return buf;
+    }
+
+    function silentWav(seconds) {
+      const n = 8000 * seconds;
+      const view = new DataView(new ArrayBuffer(44 + n));
+      const text = (at, str) => [...str].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+      text(0, "RIFF"); view.setUint32(4, 36 + n, true); text(8, "WAVEfmt ");
+      view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+      view.setUint32(24, 8000, true); view.setUint32(28, 8000, true); view.setUint16(32, 1, true);
+      view.setUint16(34, 8, true); text(36, "data"); view.setUint32(40, n, true);
+      for (let i = 0; i < n; i++) view.setUint8(44 + i, 128);
+      return new Blob([view], { type: "audio/wav" });
+    }
+
+    // iOS: Web Audio hängt sonst in der Ambient-Session, die der Stumm-Schalter
+    // mutet. Drei Schichten: (1) Audio-Session auf "playback" (Safari ab 16.4),
+    // (2) der Ausgang läuft als Medienelement statt direkt über ctx.destination,
+    // das ist die Kategorie, die der Schalter nicht stummt, (3) als Rückfall ein
+    // stilles Träger-Element.
+    const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+    function claimPlayback() {
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* optional */ }
+    }
+
+    function startCarrier() {
+      try {
+        if (!A.carrier) {
+          A.carrier = new Audio(URL.createObjectURL(silentWav(1)));
+          A.carrier.loop = true;
+          A.carrier.setAttribute("playsinline", "");
+        }
+        A.carrier.play().catch(() => {});
+      } catch { /* optional */ }
+    }
+    function releasePlayback() {
+      if (A.carrier) A.carrier.pause();
+      if (A.el) A.el.pause();
+    }
+
+    function routeOutput(ac) {
+      const direct = () => { A.fade.connect(ac.destination); A.route = "direkt"; };
+      if (!IOS || !ac.createMediaStreamDestination) { direct(); return; }
+      try {
+        const dest = ac.createMediaStreamDestination();
+        A.fade.connect(dest);
+        const el = new Audio();
+        el.setAttribute("playsinline", "");
+        el.srcObject = dest.stream;
+        A.el = el;
+        A.route = "Medienelement";
+        el.play().catch(() => {
+          try { A.fade.disconnect(dest); } catch { /* egal */ }
+          A.el = null;
+          direct();
+          startCarrier();
+          $("engine").textContent = $("engine").textContent.replace("Medienelement", "direkt");
+        });
+      } catch { direct(); startCarrier(); }
+    }
+
+    async function startAudio() {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) throw new Error("Web Audio nicht verfügbar");
+      let ac;
+      try { ac = new AC({ latencyHint: "playback" }); } catch { ac = new AC(); }
+      A.ctx = ac;
+      if (ac.resume) ac.resume();
+
+      A.hp = ac.createBiquadFilter(); A.hp.type = "highpass"; A.hp.Q.value = 0.707;
+      A.lp = ac.createBiquadFilter(); A.lp.type = "lowpass"; A.lp.Q.value = 0.707;
+      A.dry = ac.createGain(); A.wet = ac.createGain();
+      A.conv = ac.createConvolver(); A.conv.buffer = makeIR(ac, S.hallLen);
+      const sum = ac.createGain();
+      A.an = ac.createAnalyser(); A.an.fftSize = 16384; A.an.smoothingTimeConstant = 0.35;
+      A.master = ac.createGain(); A.master.gain.value = 0;
+      A.fade = ac.createGain(); A.fade.gain.value = 0;
+
+      A.hp.connect(A.lp);
+      A.lp.connect(A.dry).connect(sum);
+      A.lp.connect(A.conv).connect(A.wet).connect(sum);
+      sum.connect(A.an);
+      sum.connect(A.master).connect(A.fade);
+      routeOutput(ac);
+
+      let mode = "";
+      try {
+        const url = URL.createObjectURL(new Blob([WORKLET_SRC], { type: "text/javascript" }));
+        await ac.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+        A.node = new AudioWorkletNode(ac, "helix", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+        A.node.port.onmessage = (e) => { lastState = e.data; };
+        A.node.port.postMessage({ p: engineParams(), reset: true });
+        A.node.connect(A.hp);
+        mode = "AudioWorklet";
+      } catch {
+        A.engine = makeEngine(ac.sampleRate);
+        A.engine.set(engineParams());
+        A.engine.reset();
+        A.proc = ac.createScriptProcessor(2048, 0, 2);
+        A.proc.onaudioprocess = (ev) => {
+          A.engine.process(ev.outputBuffer.getChannelData(0), ev.outputBuffer.getChannelData(1), ev.outputBuffer.length);
+          lastState = A.engine.state();
+        };
+        A.proc.connect(A.hp);
+        mode = "ScriptProcessor (Fallback)";
+      }
+      $("engine").textContent = `Engine: ${mode}, ${Math.round(ac.sampleRate)} Hz, Ausgang: ${A.route}`;
+      applyGraph();
+      prepFFT();
+    }
+
+    function applyGraph() {
+      if (!A.ctx) return;
+      const t = A.ctx.currentTime;
+      const db = S.master;
+      A.master.gain.setTargetAtTime(db <= -60 ? 0 : Math.pow(10, db / 20), t, 0.05);
+      const m = S.hall / 100;
+      A.dry.gain.setTargetAtTime(Math.cos(m * Math.PI / 2), t, 0.05);
+      A.wet.gain.setTargetAtTime(Math.sin(m * Math.PI / 2), t, 0.05);
+      A.hp.frequency.setTargetAtTime(S.hp, t, 0.05);
+      A.lp.frequency.setTargetAtTime(Math.min(S.lp, A.ctx.sampleRate * 0.45), t, 0.05);
+    }
+
+    function pushEngine() {
+      if (A.node) A.node.port.postMessage({ p: engineParams() });
+      else if (A.engine) A.engine.set(engineParams());
+    }
+
+    function stopAudio() {
+      if (!A.ctx) return;
+      const ac = A.ctx;
+      const t = ac.currentTime;
+      try {
+        A.fade.gain.cancelScheduledValues(t);
+        A.fade.gain.setValueAtTime(A.fade.gain.value, t);
+        A.fade.gain.linearRampToValueAtTime(0, t + 0.3);
+      } catch { /* Kontext schon zu */ }
+      const proc = A.proc, node = A.node, el = A.el;
+      A.el = null;
+      setTimeout(() => {
+        if (el) { el.pause(); el.srcObject = null; }
+        if (proc) proc.onaudioprocess = null;
+        if (node) node.port.onmessage = null;
+        ac.close();
+      }, 400);
+      A.ctx = A.node = A.proc = A.engine = A.an = null;
+    }
+
+    // ---------------------------------------------------------------------
+    // Transport
+
+    function setState(label) {
+      $("state").textContent = label;
+      $("btn-play").disabled = run.playing || run.starting;
+      $("btn-pause").disabled = !run.playing;
+      $("btn-stop").disabled = !run.playing && !run.paused;
+      $("btn-play").textContent = run.paused ? "Weiter" : "Start";
+    }
+
+    function elapsed() { return A.ctx ? A.ctx.currentTime - A.t0 : 0; }
+
+    function renderClock() {
+      const e = elapsed();
+      const total = S.dur > 0 ? ` / ${clock(S.dur * 60)}` : "";
+      $("hud-clock").textContent = clock(e) + total;
+      $("dock-clock").textContent = clock(e) + total;
+    }
+
+    async function play() {
+      if (run.playing || run.starting) return;
+      claimPlayback();
+      try {
+        if (!run.paused) {
+          run.starting = true;
+          setState("Startet");
+          await startAudio();
+          run.starting = false;
+          A.t0 = A.ctx.currentTime;
+          A.fading = false;
+          const t = A.ctx.currentTime;
+          A.fade.gain.setValueAtTime(0, t);
+          A.fade.gain.linearRampToValueAtTime(1, t + Math.max(0.05, S.fadeIn));
+          clearSpec();
+        } else {
+          if (A.el) A.el.play().catch(() => {});
+          await A.ctx.resume();
+        }
+      } catch (err) {
+        run.starting = false;
+        setState("Fehler");
+        $("engine").textContent = "Engine: " + (err && err.message ? err.message : "Start fehlgeschlagen");
+        return;
+      }
+      run.playing = true;
+      run.paused = false;
+      setState("Läuft");
+      clearInterval(A.timer);
+      A.timer = setInterval(tick, 200);
+      last = performance.now();
+      requestAnimationFrame(frame);
+    }
+
+    function pause() {
+      if (!run.playing) return;
+      run.playing = false;
+      run.paused = true;
+      if (A.ctx) A.ctx.suspend();
+      releasePlayback();
+      setState("Pausiert");
+    }
+
+    function stop(label = "Bereit") {
+      run.playing = false;
+      run.paused = false;
+      run.starting = false;
+      clearInterval(A.timer);
+      stopAudio();
+      releasePlayback();
+      lastState = { g: 0, t: 0, rate: 0 };
+      setState(label);
+      renderClock();
+      drawIdle();
+    }
+
+    function tick() {
+      if (!A.ctx) return;
+      renderClock();
+      if (S.dur <= 0) return;
+      const e = elapsed(), total = S.dur * 60;
+      if (!A.fading && S.fadeOut > 0 && e >= total - S.fadeOut) {
+        A.fading = true;
+        const t = A.ctx.currentTime;
+        A.fade.gain.cancelScheduledValues(t);
+        A.fade.gain.setValueAtTime(A.fade.gain.value, t);
+        A.fade.gain.linearRampToValueAtTime(0, t + Math.max(0.05, total - e));
+      }
+      if (e >= total) stop("Beendet");
+    }
+
+    // ---------------------------------------------------------------------
+    // Zeichnen
+
+    const spec = $("spec"), axis = $("axis"), envc = $("envc");
+    const sctx = spec.getContext("2d"), actx = axis.getContext("2d"), ectx = envc.getContext("2d");
+    const px = document.createElement("canvas");
+    px.width = px.height = 1;
+    const pctx = px.getContext("2d", { willReadFrequently: true });
+    let pal = null, palAt = 0;
+    let view = [4.32, 14.29];
+    let prevPos = [], prevY = [];
+    let binLo = null, binHi = null, fftBuf = null, peakDb = -60;
+    let last = 0, accPx = 0, hudAt = 0;
+
+    function rgbOf(c) {
+      pctx.clearRect(0, 0, 1, 1);
+      pctx.fillStyle = c;
+      pctx.fillRect(0, 0, 1, 1);
+      const d = pctx.getImageData(0, 0, 1, 1).data;
+      return [d[0], d[1], d[2]];
+    }
+    function palette(now = performance.now()) {
+      if (pal && now - palAt < 1000) return pal;
+      const s = getComputedStyle(spec);
+      const before = pal && pal.text;
+      pal = { text: s.color, border: s.borderTopColor, muted: s.outlineColor, rgb: rgbOf(s.color) };
+      palAt = now;
+      if (before && before !== pal.text) { clearSpec(); drawAxis(); }
+      return pal;
+    }
+
+    function viewRange() {
+      let lo = Math.log2(S.fc) - geo.span / 2 - 0.25;
+      let hi = Math.log2(S.fc) + geo.span / 2 + 0.25;
+      lo = Math.max(lo, Math.log2(20));
+      hi = Math.min(hi, Math.log2(20000));
+      if (hi - lo < 1) { const m = (hi + lo) / 2; lo = m - 0.5; hi = m + 0.5; }
+      return [lo, hi];
+    }
+    const yOf = (lf, H) => (1 - (lf - view[0]) / (view[1] - view[0])) * H;
+
+    function sizeCanvas(c) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.max(1, Math.round(c.clientWidth * dpr)), h = Math.max(1, Math.round(c.clientHeight * dpr));
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; return true; }
+      return false;
+    }
+
+    function layout() {
+      const a = sizeCanvas(spec), b = sizeCanvas(axis), c = sizeCanvas(envc);
+      if (a || b || c) { view = viewRange(); clearSpec(); drawAxis(); prepFFT(); drawIdle(); }
+    }
+
+    function clearSpec() {
+      sctx.clearRect(0, 0, spec.width, spec.height);
+      prevPos = []; prevY = [];
+      accPx = 0;
+    }
+
+    const TICKS = [25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800];
+    function drawAxis() {
+      const c = palette();
+      const dpr = window.devicePixelRatio || 1;
+      const W = axis.width, H = axis.height;
+      actx.clearRect(0, 0, W, H);
+      actx.font = `${11 * dpr}px system-ui, sans-serif`;
+      actx.textBaseline = "bottom";
+      actx.textAlign = "right";
+      actx.strokeStyle = c.border;
+      actx.fillStyle = c.muted;
+      actx.lineWidth = 1;
+      for (const f of TICKS) {
+        const lf = Math.log2(f);
+        if (lf < view[0] || lf > view[1]) continue;
+        const y = Math.round(yOf(lf, H)) + 0.5;
+        actx.globalAlpha = 0.6;
+        actx.beginPath(); actx.moveTo(0, y); actx.lineTo(W, y); actx.stroke();
+        actx.globalAlpha = 1;
+        actx.fillText(f >= 1000 ? `${f / 1000} k` : `${f}`, W - 5 * dpr, y - 2 * dpr);
+      }
+      actx.textAlign = "left";
+      actx.textBaseline = "bottom";
+      actx.fillText(`vor ${Math.round(S.win)} s`, 6 * dpr, H - 5 * dpr);
+    }
+
+    function shiftSpec(ix) {
+      sctx.globalCompositeOperation = "copy";
+      sctx.drawImage(spec, -ix, 0);
+      sctx.globalCompositeOperation = "source-over";
+    }
+
+    function drawModel(ix, st, c) {
+      const dpr = window.devicePixelRatio || 1;
+      const W = spec.width, H = spec.height;
+      sctx.strokeStyle = c.text;
+      sctx.lineWidth = Math.max(1, 1.5 * dpr);
+      sctx.lineCap = "round";
+      for (let k = 0; k < S.n; k++) {
+        const pos = mod(st.g + k * geo.sp, geo.span);
+        const y = yOf(Math.log2(S.fc) + pos - geo.span / 2, H);
+        const prev = prevPos[k];
+        if (prev !== undefined && Math.abs(pos - prev) < geo.span / 2) {
+          const a = envelope(envP, pos / geo.span);
+          if (a > 0.004) {
+            sctx.globalAlpha = Math.min(1, Math.pow(a, 0.7)) * 0.95;
+            sctx.beginPath();
+            sctx.moveTo(W - ix, prevY[k]);
+            sctx.lineTo(W, y);
+            sctx.stroke();
+          }
+        }
+        prevPos[k] = pos; prevY[k] = y;
+      }
+      sctx.globalAlpha = 1;
+    }
+
+    function prepFFT() {
+      if (!A.an || !A.ctx) return;
+      const H = spec.height;
+      const N = A.an.frequencyBinCount, binHz = A.ctx.sampleRate / A.an.fftSize;
+      binLo = new Int32Array(H); binHi = new Int32Array(H);
+      for (let y = 0; y < H; y++) {
+        const top = view[1] - (y / H) * (view[1] - view[0]);
+        const bot = view[1] - ((y + 1) / H) * (view[1] - view[0]);
+        let lo = Math.floor(Math.pow(2, bot) / binHz), hi = Math.ceil(Math.pow(2, top) / binHz);
+        lo = Math.min(N - 2, Math.max(1, lo));
+        hi = Math.min(N - 1, Math.max(lo + 1, hi));
+        binLo[y] = lo; binHi[y] = hi;
+      }
+      fftBuf = new Float32Array(N);
+    }
+
+    function drawFFT(ix, c) {
+      if (!A.an || !binLo || binLo.length !== spec.height) prepFFT();
+      if (!A.an || !fftBuf) return;
+      A.an.getFloatFrequencyData(fftBuf);
+      const H = spec.height;
+      let fmax = -200;
+      const row = new Float32Array(H);
+      for (let y = 0; y < H; y++) {
+        let m = -200;
+        for (let i = binLo[y]; i < binHi[y]; i++) if (fftBuf[i] > m) m = fftBuf[i];
+        row[y] = m;
+        if (m > fmax) fmax = m;
+      }
+      peakDb = Math.max(fmax, peakDb - 0.05);
+      const img = new ImageData(ix, H);
+      const [r, g, b] = c.rgb;
+      for (let y = 0; y < H; y++) {
+        const v = Math.min(1, Math.max(0, (row[y] - (peakDb - 54)) / 54));
+        const a = Math.round(255 * Math.pow(v, 1.6));
+        for (let x = 0; x < ix; x++) {
+          const o = (y * ix + x) * 4;
+          img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = a;
+        }
+      }
+      sctx.putImageData(img, spec.width - ix, 0);
+    }
+
+    function drawEnv(st, c) {
+      const dpr = window.devicePixelRatio || 1;
+      const W = envc.width, H = envc.height;
+      ectx.clearRect(0, 0, W, H);
+      const right = W - 6 * dpr, room = W - 14 * dpr;
+      ectx.strokeStyle = c.border;
+      ectx.lineWidth = 1;
+      ectx.globalAlpha = 0.6;
+      for (const f of TICKS) {
+        const lf = Math.log2(f);
+        if (lf < view[0] || lf > view[1]) continue;
+        const y = Math.round(yOf(lf, H)) + 0.5;
+        ectx.beginPath(); ectx.moveTo(0, y); ectx.lineTo(W, y); ectx.stroke();
+      }
+      ectx.globalAlpha = 1;
+
+      const posOf = (y) => (view[1] - (y / H) * (view[1] - view[0])) - (Math.log2(S.fc) - geo.span / 2);
+      ectx.beginPath();
+      ectx.moveTo(right, 0);
+      let started = false;
+      for (let y = 0; y <= H; y++) {
+        const a = envelope(envP, posOf(y) / geo.span);
+        if (a <= 0 && !started) continue;
+        started = true;
+        ectx.lineTo(right - a * room, y);
+      }
+      ectx.lineTo(right, H);
+      ectx.closePath();
+      ectx.fillStyle = c.border;
+      ectx.fill();
+      ectx.strokeStyle = c.text;
+      ectx.lineWidth = Math.max(1, dpr);
+      ectx.beginPath();
+      started = false;
+      for (let y = 0; y <= H; y++) {
+        const a = envelope(envP, posOf(y) / geo.span);
+        if (a <= 0) { started = false; continue; }
+        const x = right - a * room;
+        if (!started) { ectx.moveTo(x, y); started = true; } else ectx.lineTo(x, y);
+      }
+      ectx.stroke();
+
+      ectx.fillStyle = c.text;
+      for (let k = 0; k < S.n; k++) {
+        const pos = mod(st.g + k * geo.sp, geo.span);
+        const a = envelope(envP, pos / geo.span);
+        const y = yOf(Math.log2(S.fc) + pos - geo.span / 2, H);
+        ectx.globalAlpha = 0.25 + 0.75 * a;
+        ectx.beginPath();
+        ectx.arc(right - a * room, y, 3.2 * dpr, 0, Math.PI * 2);
+        ectx.fill();
+      }
+      ectx.globalAlpha = 1;
+    }
+
+    function drawIdle() {
+      const c = palette();
+      drawEnv(lastState, c);
+    }
+
+    function frame(now) {
+      if (!run.playing) return;
+      requestAnimationFrame(frame);
+      const dt = Math.min(0.25, (now - last) / 1000);
+      last = now;
+      const c = palette(now);
+      accPx += dt * spec.width / S.win;
+      const ix = Math.floor(accPx);
+      if (ix >= 1) {
+        accPx -= ix;
+        const step = Math.min(ix, spec.width);
+        shiftSpec(step);
+        if (S.view === "fft") drawFFT(step, c); else drawModel(step, lastState, c);
+      }
+      drawEnv(lastState, c);
+      if (now - hudAt > 100) {
+        hudAt = now;
+        const r = lastState.rate;
+        $("hud-rate").textContent = `${r >= 0 ? "aufwärts" : "abwärts"} ${fmtN(Math.abs(r) * 1200, 0)} ct/s`;
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // Änderungen
+
+    const VIEW_KEYS = new Set(["n", "spacing", "fc", "win", "view", "*"]);
+    let irTimer = 0;
+
+    function changed(k) {
+      derive();
+      syncNeeds();
+      pushEngine();
+      applyGraph();
+      if (k === "hallLen" || k === "*") {
+        clearTimeout(irTimer);
+        irTimer = setTimeout(() => { if (A.ctx) A.conv.buffer = makeIR(A.ctx, S.hallLen); }, 250);
+      }
+      if (VIEW_KEYS.has(k)) {
+        view = viewRange();
+        clearSpec();
+        drawAxis();
+        prepFFT();
+      }
+      if (!run.playing) drawIdle();
+      renderClock();
+      save();
+    }
+
+    function syncNeeds() {
+      for (const k of Object.keys(ctl)) {
+        const c = ctl[k];
+        if (c.it.needs) c.box.classList.toggle("dim", !c.it.needs(S));
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // Start
+
+    load();
+    buildUI();
+    syncUI();
+    derive();
+    setState("Bereit");
+    renderClock();
+
+    $("btn-play").addEventListener("click", play);
+    $("btn-pause").addEventListener("click", pause);
+    $("btn-stop").addEventListener("click", () => stop());
+    window.addEventListener("keydown", (e) => {
+      if (e.code !== "Space") return;
+      if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)) return;
+      e.preventDefault();
+      run.playing ? pause() : play();
+    });
+    if (window.ResizeObserver) new ResizeObserver(layout).observe($("session").querySelector(".viz"));
+    window.addEventListener("resize", layout);
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { pal = null; clearSpec(); drawAxis(); drawIdle(); });
+    new MutationObserver(() => { pal = null; clearSpec(); drawAxis(); drawIdle(); })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+    view = viewRange();
+    layout();
+    drawAxis();
+    drawIdle();
+  </script>
+</body>
+</html>
