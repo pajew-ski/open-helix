@@ -1,22 +1,30 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>open helix</title>
-  <meta name="description" content="Shepard-Risset-Glissando im Browser: der endlos steigende (oder fallende) Ton, komplett parametrisierbar, in Echtzeit synthetisiert.">
+  <meta name="description" content="A Shepard-Risset glissando in the browser: the tone that rises or falls forever, every parameter adjustable, synthesized in real time.">
   <link rel="icon" href="data:,">
+  <script>
+    // Language: both variants ship in this file. German when the browser's first
+    // language is German, English otherwise; ?lang=de or ?lang=en overrides.
+    // Runs before the first paint so the other variant never flashes.
+    {
+      const asked = new URLSearchParams(location.search).get("lang");
+      const first = (navigator.languages && navigator.languages[0]) || navigator.language || "en";
+      document.documentElement.lang = asked === "de" || asked === "en" ? asked : /^de\b/i.test(first) ? "de" : "en";
+    }
+  </script>
   <style>
-    /* Design-Tokens aus open entrainer: streng achromatisch (oklch, Chroma 0),
-       Hell und Dunkel teilen eine Skala. Abstände sind die Fibonacci-Folge,
-       die Schriftskala Potenzen von φ. */
+    /* Design tokens, shared with temet-nosce.
+       Color is strictly achromatic: oklch with chroma 0 cannot tint, light and
+       dark share one scale and flip with prefers-color-scheme. Geometry derives
+       from φ: the spacing ladder is the Fibonacci sequence, the type scale is
+       powers of φ. */
 
     :root {
       color-scheme: light dark;
-      box-sizing: border-box;
-      padding-top: env(safe-area-inset-top, 0px);
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-
       --bg: oklch(98% 0 0);
       --surface: oklch(94% 0 0);
       --border: oklch(85% 0 0);
@@ -30,23 +38,26 @@
       --space-5: 34px;
       --space-6: 55px;
       --space-7: 89px;
+      --space-8: 144px;
       --radius-sm: var(--space-1);
       --radius-md: var(--space-2);
       --radius-lg: var(--space-3);
 
-      --text-sm: 0.875rem;
-      --text-base: 1rem;
-      --text-lg: 1.618rem;
-      --text-xl: 2.618rem;
-      --text-2xl: 4.236rem;
+      --text-sm: 0.875rem;     /* 14px, captions; deliberately not 1/φ, legibility floor */
+      --text-base: 1rem;       /* browser default, respects user zoom */
+      --text-lg: 1.618rem;     /* φ¹ */
+      --text-xl: 2.618rem;     /* φ² */
+      --text-2xl: 4.236rem;    /* φ³ */
 
       font-family: system-ui, sans-serif;
       font-size: var(--text-base);
       line-height: 1.618;
+      background: var(--bg);
+      color: var(--text);
     }
 
     @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
+      :root {
         --bg: oklch(15% 0 0);
         --surface: oklch(20% 0 0);
         --border: oklch(30% 0 0);
@@ -55,25 +66,21 @@
       }
     }
 
-    :root[data-theme="dark"] {
-      --bg: oklch(15% 0 0);
-      --surface: oklch(20% 0 0);
-      --border: oklch(30% 0 0);
-      --text: oklch(95% 0 0);
-      --text-muted: oklch(70% 0 0);
-    }
-
-    html {
-      scroll-padding-top: env(safe-area-inset-top, 0px);
-    }
-
     body {
       margin: 0;
-      background: var(--bg);
-      color: var(--text);
     }
 
-    [hidden] { display: none !important; }
+    [hidden] {
+      display: none !important;
+    }
+
+    /* Every translated element carries its own lang; the one that does not
+       match the root is hidden. */
+
+    html[lang="de"] [lang="en"],
+    html[lang="en"] [lang="de"] {
+      display: none !important;
+    }
 
     .shell {
       max-width: 987px;
@@ -81,12 +88,22 @@
       padding: 0 var(--space-4);
     }
 
-    a { color: inherit; text-underline-offset: 3px; }
-    :focus-visible { outline: 2px solid var(--text-muted); outline-offset: 2px; }
+    a {
+      color: inherit;
+      text-underline-offset: 3px;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--text-muted);
+      outline-offset: 2px;
+    }
 
     /* Hero */
 
-    .hero { padding-block: var(--space-6) var(--space-4); }
+    .hero {
+      padding-block: var(--space-8) var(--space-6);
+    }
+
     .hero h1 {
       margin: 0;
       font-size: clamp(var(--text-xl), 9vw, var(--text-2xl));
@@ -94,126 +111,65 @@
       letter-spacing: -0.02em;
       line-height: 1;
     }
+
     .hero p {
-      margin: var(--space-3) 0 0;
+      margin: var(--space-4) 0 0;
       max-width: 34rem;
       color: var(--text-muted);
     }
 
-    main section { margin: 0 0 var(--space-7); }
+    /* Sections */
+
+    main section {
+      margin: 0 0 var(--space-7);
+    }
+
     main h2 {
       margin: 0 0 var(--space-4);
       font-size: var(--text-lg);
       font-weight: 600;
       line-height: 1.2;
     }
+
     main h3 {
-      margin: 0 0 var(--space-1);
+      margin: 0 0 var(--space-2);
       font-size: var(--text-sm);
-      font-weight: 600;
+      font-weight: 400;
       color: var(--text-muted);
-      letter-spacing: 0.02em;
-    }
-    main section > p, main section > ul { margin: 0 0 var(--space-3); max-width: 42rem; }
-    main section > ul { padding-left: var(--space-4); }
-    main section > ul li { margin-bottom: var(--space-1); }
-    .caption { color: var(--text-muted); font-size: var(--text-sm); margin: 0; }
-
-    /* Visualisierung: Spektrogramm links, Hüllkurve rechts, beide teilen die
-       logarithmische Frequenzachse. */
-
-    .viz {
-      display: grid;
-      grid-template-columns: 1fr 144px;
-      height: clamp(300px, 40vw, 420px);
-      margin: 0 0 var(--space-4);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      background: var(--surface);
-      overflow: hidden;
-    }
-    .viz-main { position: relative; min-width: 0; }
-    .viz canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      color: var(--text);
-      border-color: var(--border);
-      outline-color: var(--text-muted);
-    }
-    .viz-main canvas { position: absolute; inset: 0; }
-    #envc { border-left: 1px solid var(--border); }
-
-    .hud {
-      position: absolute;
-      top: var(--space-3);
-      display: flex;
-      flex-direction: column;
-      pointer-events: none;
-      font-variant-numeric: tabular-nums;
-      padding: var(--space-1) var(--space-2);
-      border-radius: var(--radius-sm);
-      background: color-mix(in oklch, var(--surface) 78%, transparent);
-    }
-    .hud-left { left: var(--space-3); }
-    .hud-right { right: var(--space-3); text-align: right; }
-    .hud-label { font-size: var(--text-sm); color: var(--text-muted); }
-    .hud-value { font-size: var(--text-lg); font-weight: 600; line-height: 1.2; }
-    .hud-small { font-size: var(--text-sm); color: var(--text-muted); }
-
-    @media (max-width: 600px) {
-      .viz { grid-template-columns: 1fr 89px; }
-      .hud-value { font-size: var(--text-base); }
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
 
-    /* Presets */
+    main section > p,
+    main section > ul {
+      margin: 0 0 var(--space-3);
+      max-width: 42rem;
+    }
 
-    .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--space-4); }
+    main section > ul {
+      padding-left: var(--space-4);
+    }
 
-    /* Bedienelemente */
+    main section > ul li {
+      margin-bottom: var(--space-1);
+    }
 
-    .button, .chip, .seg button {
-      font: inherit;
+    .caption {
+      color: var(--text-muted);
       font-size: var(--text-sm);
-      color: var(--text);
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: var(--space-2) var(--space-4);
-      cursor: pointer;
-    }
-    .chip { padding: var(--space-1) var(--space-3); }
-    .button:hover, .chip:hover, .seg button:hover { background: var(--surface); }
-    .button:disabled { color: var(--text-muted); cursor: default; background: none; }
-    .button.primary, .seg button[aria-pressed="true"] {
-      color: var(--bg);
-      background: var(--text);
-      border-color: var(--text);
-    }
-    .button.primary:hover { background: var(--text-muted); border-color: var(--text-muted); }
-    .button.primary:disabled { background: var(--border); border-color: var(--border); color: var(--text-muted); }
-
-    .seg { display: flex; gap: 0; }
-    .seg button { flex: 1; padding: var(--space-1) var(--space-2); border-radius: 0; margin-left: -1px; }
-    .seg button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); margin-left: 0; }
-    .seg button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
-
-    .panels {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(233px, 1fr));
-      gap: var(--space-4);
-    }
-    .panel {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: var(--space-4);
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
     }
 
-    .control { display: block; }
-    .control.dim { opacity: 0.4; }
+    /* Controls: a labelled slider, select or segmented switch. The label row
+       carries the name on the left and the live value on the right. */
+
+    .control {
+      display: block;
+    }
+
+    .control.dim {
+      opacity: 0.4;
+    }
+
     .control-label {
       display: flex;
       justify-content: space-between;
@@ -221,10 +177,19 @@
       font-size: var(--text-sm);
       margin-bottom: var(--space-1);
     }
-    .control-label output { color: var(--text-muted); font-variant-numeric: tabular-nums; }
-    .control .chips { margin: var(--space-2) 0 0; gap: var(--space-1); }
 
-    input[type="range"] { display: block; width: 100%; margin: 0; accent-color: var(--text); }
+    .control-label output {
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      display: block;
+      width: 100%;
+      margin: 0;
+      accent-color: var(--text);
+    }
+
     select {
       font: inherit;
       font-size: var(--text-sm);
@@ -237,20 +202,90 @@
       box-sizing: border-box;
     }
 
-    /* Dock: Transport bleibt beim Einstellen im Bild */
+    /* Buttons. The primary button is inverted like a user message in temet-nosce:
+       text-colored surface, background-colored label. A pressed segment and a
+       chip share the same two states. */
 
-    .dock {
-      position: sticky;
-      bottom: 0;
-      z-index: 5;
-      background: var(--bg);
-      border-top: 1px solid var(--border);
-      padding: var(--space-3) 0 calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    .button,
+    .chip,
+    .seg button {
+      font: inherit;
+      font-size: var(--text-sm);
+      color: var(--text);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-2) var(--space-4);
+      cursor: pointer;
     }
-    .dock .shell { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
-    .dock .transport { display: flex; gap: var(--space-2); }
-    .dock .clock { font-size: var(--text-sm); color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 8ch; }
-    .dock .control { flex: 1 1 233px; }
+
+    .chip {
+      padding: var(--space-1) var(--space-3);
+    }
+
+    .button:hover,
+    .chip:hover,
+    .seg button:hover {
+      background: var(--surface);
+    }
+
+    .button:disabled {
+      color: var(--text-muted);
+      cursor: default;
+      background: none;
+    }
+
+    .button.primary,
+    .seg button[aria-pressed="true"] {
+      color: var(--bg);
+      background: var(--text);
+      border-color: var(--text);
+    }
+
+    .button.primary:hover {
+      background: var(--text-muted);
+      border-color: var(--text-muted);
+    }
+
+    .button.primary:disabled {
+      background: var(--border);
+      border-color: var(--border);
+      color: var(--text-muted);
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin: 0 0 var(--space-4);
+    }
+
+    .control .chips {
+      margin: var(--space-2) 0 0;
+      gap: var(--space-1);
+    }
+
+    .seg {
+      display: flex;
+    }
+
+    .seg button {
+      flex: 1;
+      padding: var(--space-1) var(--space-2);
+      border-radius: 0;
+      margin-left: -1px;
+    }
+
+    .seg button:first-child {
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+      margin-left: 0;
+    }
+
+    .seg button:last-child {
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+
+    /* Footer */
 
     footer {
       border-top: 1px solid var(--border);
@@ -258,57 +293,236 @@
       color: var(--text-muted);
       font-size: var(--text-sm);
     }
+
+    @media (max-width: 800px) {
+      .hero {
+        padding-block-start: var(--space-7);
+      }
+    }
+
+    /* Visualization: the spectrogram on the left, the envelope on the right,
+       both on the same logarithmic frequency axis. The canvases carry the page
+       tokens as their own colors so the script can read resolved values from
+       them (canvas fillStyle wants a concrete color, and the tokens are oklch). */
+
+    .viz {
+      display: grid;
+      grid-template-columns: 1fr 144px;
+      height: clamp(300px, 40vw, 420px);
+      margin: 0 0 var(--space-4);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .viz-main {
+      position: relative;
+      min-width: 0;
+    }
+
+    .viz canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      color: var(--text);
+      border-color: var(--border);
+      outline-color: var(--text-muted);
+    }
+
+    .viz-main canvas {
+      position: absolute;
+      inset: 0;
+    }
+
+    #envc {
+      border-left: 1px solid var(--border);
+    }
+
+    .hud {
+      position: absolute;
+      top: var(--space-3);
+      display: flex;
+      flex-direction: column;
+      pointer-events: none;
+      font-variant-numeric: tabular-nums;
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-sm);
+      background: color-mix(in oklch, var(--surface) 78%, transparent);
+    }
+
+    .hud-left {
+      left: var(--space-3);
+    }
+
+    .hud-right {
+      right: var(--space-3);
+      text-align: right;
+    }
+
+    .hud-label {
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .hud-value {
+      font-size: var(--text-lg);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .hud-small {
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+    }
+
+    /* Settings panels: bordered boxes that wrap to one column when narrow */
+
+    .panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(233px, 1fr));
+      gap: var(--space-4);
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+
+    .panel .caption {
+      margin: 0;
+    }
+
+    /* Dock: the transport and the volume stay in view while the panels scroll */
+
+    .dock {
+      position: sticky;
+      bottom: 0;
+      z-index: 5;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: var(--space-3) 0;
+    }
+
+    .dock .shell {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-3) var(--space-4);
+    }
+
+    .dock .transport {
+      display: flex;
+      gap: var(--space-2);
+    }
+
+    .dock .clock {
+      font-size: var(--text-sm);
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      min-width: 8ch;
+    }
+
+    .dock .control {
+      flex: 1 1 233px;
+    }
+
+    @media (max-width: 600px) {
+      .viz {
+        grid-template-columns: 1fr 89px;
+      }
+      .hud-value {
+        font-size: var(--text-base);
+      }
+    }
   </style>
 </head>
 <body>
   <header class="hero shell">
     <h1>open helix</h1>
-    <p>Ein Ton, der immer weiter steigt und nie oben ankommt. Alle Parameter des Shepard-Risset-Glissandos einstellbar, in Echtzeit im Browser erzeugt.</p>
+    <p lang="en">A tone that keeps rising and never reaches the top. Every parameter of the Shepard-Risset glissando on one page, synthesized live in the browser.</p>
+    <p lang="de">Ein Ton, der immer weiter steigt und nie oben ankommt. Alle Parameter des Shepard-Risset-Glissandos auf einer Seite, live im Browser erzeugt.</p>
   </header>
 
   <main class="shell">
+    <section id="how">
+      <h2><span lang="en">How it works</span><span lang="de">Wie es funktioniert</span></h2>
+      <p lang="en">Several sine tones a fixed interval apart rise together. A bell curve over the logarithmic frequency axis fades them in at the bottom and out at the top. When the highest one disappears, a new one appears at the bottom: the pitch class keeps moving while the register stays where it is. In the spectrogram these are the diagonal stripes. Gliding, this is the Shepard-Risset glissando; in steps, the Shepard scale.</p>
+      <p lang="de">Mehrere Sinustöne im festen Abstand steigen gleichzeitig. Eine Glockenkurve über der logarithmischen Frequenzachse blendet sie unten ein und oben aus. Wenn der höchste verschwindet, erscheint unten ein neuer: die Tonhöhenklasse wandert immer weiter, die absolute Lage bleibt. Im Spektrogramm sind das die diagonalen Streifen. Gleitend heißt das Shepard-Risset-Glissando, in Stufen Shepard-Skala.</p>
+      <p lang="en">The spacing does not have to be an octave. Any other interval gives a pattern that only repeats after that interval. The binaural beat moves the left and right copy of each tone apart by the set difference and needs headphones.</p>
+      <p lang="de">Der Abstand muss keine Oktave sein. Bei jedem anderen Intervall entsteht ein Muster, das sich erst nach diesem Intervall wiederholt. Der binaurale Beat legt die Töne links und rechts um die eingestellte Differenz auseinander und braucht Kopfhörer.</p>
+      <p lang="en">Everything is synthesized in this page while it plays, in an AudioWorklet where the browser has one. Nothing is downloaded, nothing is sent anywhere, and the settings stay in your browser.</p>
+      <p lang="de">Alles wird beim Abspielen in dieser Seite synthetisiert, in einem AudioWorklet, wo der Browser eines hat. Nichts wird heruntergeladen, nichts wird irgendwohin gesendet, und die Einstellungen bleiben im Browser.</p>
+    </section>
+
     <section id="session">
+      <h2><span lang="en">Session</span><span lang="de">Sitzung</span></h2>
+
       <div class="viz">
         <div class="viz-main">
-          <canvas id="spec" aria-label="Spektrogramm: Frequenz logarithmisch von unten nach oben, Zeit von links nach rechts"></canvas>
+          <canvas id="spec"></canvas>
           <canvas id="axis" aria-hidden="true"></canvas>
           <div class="hud hud-left">
-            <span class="hud-label">Zustand</span>
-            <span id="state" class="hud-value">Bereit</span>
+            <span class="hud-label"><span lang="en">State</span><span lang="de">Zustand</span></span>
+            <span id="state" class="hud-value"></span>
             <span id="hud-clock" class="hud-small">00:00</span>
           </div>
           <div class="hud hud-right">
-            <span class="hud-label">Lauf</span>
-            <span id="hud-rate" class="hud-value">aufwärts</span>
-            <span id="hud-range" class="hud-small">31 Hz bis 8 kHz</span>
+            <span class="hud-label"><span lang="en">Motion</span><span lang="de">Lauf</span></span>
+            <span id="hud-rate" class="hud-value"></span>
+            <span id="hud-range" class="hud-small"></span>
           </div>
         </div>
-        <canvas id="envc" aria-label="Hüllkurve mit den aktuellen Komponenten"></canvas>
+        <canvas id="envc"></canvas>
       </div>
 
       <div class="chips" id="presets"></div>
       <div class="panels" id="panels"></div>
+      <p class="caption"><span lang="en">Space starts and pauses.</span><span lang="de">Leertaste startet und pausiert.</span> <span id="engine"></span></p>
     </section>
 
-    <section id="how">
-      <h2>Wie es funktioniert</h2>
-      <p>Mehrere Sinustöne im festen Abstand steigen gleichzeitig. Eine Glockenkurve über der logarithmischen Frequenzachse blendet sie unten ein und oben aus. Wenn der höchste verschwindet, erscheint unten ein neuer: die Tonhöhenklasse wandert immer weiter, die absolute Lage bleibt. Im Spektrogramm sind das die diagonalen Streifen. Gleitend heißt das Shepard-Risset-Glissando, in Stufen Shepard-Skala.</p>
-      <p>Der Abstand muss keine Oktave sein. Bei jedem anderen Intervall entsteht ein Muster, das sich erst nach diesem Intervall wiederholt. Der binaurale Beat legt die Töne links und rechts um die eingestellte Differenz auseinander und braucht Kopfhörer.</p>
+    <section id="using">
+      <h2><span lang="en">Using it</span><span lang="de">Anwendung</span></h2>
+      <ul lang="en">
+        <li>Start quiet. Use headphones for the binaural beat, panning, and tremolo phase.</li>
+        <li>Pick a preset as a starting point, then change one thing at a time. The spectrogram shows the result as it happens.</li>
+        <li>The Model view draws the components as the engine computes them. The Analyzer view shows what actually comes out after filters and reverb.</li>
+        <li>Set a duration and the session fades out and stops by itself. At zero it runs until you stop it.</li>
+      </ul>
+      <ul lang="de">
+        <li>Leise beginnen. Für binauralen Beat, Panorama und Tremolo-Phase Kopfhörer benutzen.</li>
+        <li>Ein Preset als Ausgangspunkt wählen, dann eine Sache nach der anderen ändern. Das Spektrogramm zeigt das Ergebnis sofort.</li>
+        <li>Die Ansicht Modell zeichnet die Komponenten so, wie die Engine sie berechnet. Die Ansicht Analyzer zeigt, was nach Filtern und Hall tatsächlich herauskommt.</li>
+        <li>Mit einer Dauer blendet die Sitzung am Ende aus und stoppt von selbst. Bei null läuft sie, bis sie gestoppt wird.</li>
+      </ul>
     </section>
 
     <section id="before">
-      <h2>Vorher</h2>
-      <ul>
-        <li>Leise beginnen. Der Effekt braucht keine Lautstärke, und schnelle Läufe mit vielen Komponenten wirken intensiver als erwartet.</li>
-        <li>Nicht beim Fahren oder an Maschinen benutzen.</li>
-        <li>Bei Epilepsie, Herzschrittmacher oder psychischer Erkrankung vorher ärztlich klären. Kein Medizinprodukt.</li>
+      <h2><span lang="en">Before you use it</span><span lang="de">Vor der Anwendung</span></h2>
+      <ul lang="en">
+        <li>This is a listening tool, not a medical device. It does not treat anything.</li>
+        <li>The effect does not need volume, and fast runs with many components feel more intense than expected.</li>
+        <li>Do not use it while driving or operating anything that needs your attention.</li>
+        <li>With epilepsy, a pacemaker, or a psychiatric condition, ask a clinician first. Stop if you feel unwell.</li>
+      </ul>
+      <ul lang="de">
+        <li>Dies ist ein Werkzeug zum Hören, kein Medizinprodukt. Es behandelt nichts.</li>
+        <li>Der Effekt braucht keine Lautstärke, und schnelle Läufe mit vielen Komponenten wirken intensiver als erwartet.</li>
+        <li>Nicht beim Fahren benutzen oder beim Bedienen von irgendetwas, das Aufmerksamkeit braucht.</li>
+        <li>Bei Epilepsie, Herzschrittmacher oder psychischer Erkrankung vorher ärztlich abklären. Aufhören, wenn es einem nicht gut geht.</li>
       </ul>
     </section>
   </main>
 
   <footer>
     <div class="shell">
-      open helix · nach der Idee von <a href="https://github.com/pajew-ski/open-entrainer">open entrainer</a> · Unlicense · <span id="engine">Engine: nicht gestartet</span>
+      open helix · <span lang="en">built from</span><span lang="de">gebaut aus</span> <a id="agents-link" href="https://github.com/pajew-ski/open-helix/blob/main/AGENTS.md">AGENTS.md</a> <span lang="en">by a coding agent</span><span lang="de">von einem Coding-Agenten</span> · <a id="source-link" href="https://github.com/pajew-ski/open-helix"><span lang="en">source on GitHub</span><span lang="de">Quelltext auf GitHub</span></a>
     </div>
   </footer>
 
@@ -317,24 +531,37 @@
       <div class="transport">
         <button type="button" id="btn-play" class="button primary">Start</button>
         <button type="button" id="btn-pause" class="button" disabled>Pause</button>
-        <button type="button" id="btn-stop" class="button" disabled>Stopp</button>
+        <button type="button" id="btn-stop" class="button" disabled><span lang="en">Stop</span><span lang="de">Stopp</span></button>
       </div>
       <span id="dock-clock" class="clock">00:00</span>
       <div id="dock-master" class="control"></div>
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    // Point the footer at whichever repository this site was deployed from, so a
+    // fork needs no manual edit. On <owner>.github.io/<repo>/ the owner and repo
+    // come straight from the URL; anywhere else (localhost, a custom domain) the
+    // static hrefs above stay as the fallback.
+    const host = location.hostname;
+    if (host.endsWith(".github.io")) {
+      const owner = host.slice(0, -".github.io".length);
+      const repo = location.pathname.split("/").filter(Boolean)[0] || `${owner}.github.io`;
+      const base = `https://github.com/${owner}/${repo}`;
+      document.querySelector("#source-link").href = base;
+      document.querySelector("#agents-link").href = `${base}/blob/main/AGENTS.md`;
+    }
+  </script>
+  <script type="module">
     // open helix
-    // Eine Datei, keine Abhängigkeiten. Die Synthese läuft als AudioWorklet
-    // (Fallback: ScriptProcessor), das Bild wird aus dem Zustand der Engine
-    // gezeichnet.
+    // One file, no dependencies. Synthesis runs in an AudioWorklet (fallback:
+    // ScriptProcessor); the picture is drawn from the engine's state.
 
     // ==ENGINE==
     function mod(x, m) { return x - m * Math.floor(x / m); }
 
-    // Hüllkurve über der normierten Position x in [0,1] der Spanne. An beiden
-    // Rändern 0, damit der Sprung von oben nach unten unhörbar bleibt.
+    // Envelope over the normalized position x in [0,1] of the span. Zero at both
+    // edges, so the jump from the top back to the bottom stays inaudible.
     function envelope(P, x) {
       if (x <= 0 || x >= 1) return 0;
       switch (P.env) {
@@ -390,8 +617,8 @@
           hw.push(w);
           ws += w * w;
         }
-        // Mittlere Leistung über einen Zyklus, damit die Lautstärke nicht von
-        // Komponentenzahl, Hüllkurve und Klangfarbe abhängt.
+        // Mean power over one cycle, so loudness does not depend on the number
+        // of components, the envelope, or the waveform.
         let m = 0;
         const J = 24;
         for (let j = 0; j < J; j++) {
@@ -421,7 +648,7 @@
 
       function block(m) {
         const dt = m / sr;
-        // Bewegung
+        // Motion
         const dirF = P.dir === 0 ? Math.sin(TAU * t / Math.max(1, P.pendel)) : P.dir;
         const tmod = 1 + P.tmDepth * Math.sin(TAU * t / Math.max(1, P.tmPeriod));
         acc = Math.min(16, Math.max(1 / 16, acc * Math.pow(1 + P.accel / 100, dt / 60)));
@@ -452,8 +679,8 @@
             const pos = mod(eff + k * sp, span), x = pos / span;
             const f = P.fc * Math.pow(2, pos - span / 2);
             if (Math.abs(pos - ppos[k]) > span * 0.5) {
-              // Sprung von oben nach unten: Amplitude ist dort 0, die
-              // Frequenz darf sofort auf den neuen Wert.
+              // Jump from the top to the bottom: the amplitude is zero there,
+              // so the frequency may take the new value at once.
               pil[k] = Math.max(1e-5, (f - b / 2) / sr);
               pir[k] = Math.max(1e-5, (f + b / 2) / sr);
             }
@@ -502,7 +729,7 @@
           pgL[k] = gLt; pgR[k] = gRt; pil[k] = ilt; pir[k] = irt;
         }
 
-        // Tremolo, Rauschen, Begrenzer
+        // Tremolo, noise, limiter
         const trem = P.tremDepth > 0;
         const tstep = P.tremRate / sr, toff = P.tremPhase / 360;
         const ntg = P.noise;
@@ -565,63 +792,71 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
 });`;
 
     // ---------------------------------------------------------------------
-    // Parameter
+    // Language. The prose is in the markup, one element per language; what the
+    // script writes is given as L(english, german) where it is used.
+
+    const LANG = document.documentElement.lang === "de" ? "de" : "en";
+    const L = (en, de) => LANG === "de" ? de : en;
+
+    // ---------------------------------------------------------------------
+    // Parameters
 
     const $ = (id) => document.getElementById(id);
-    const fmtN = (v, d = 1) => v.toFixed(d).replace(".", ",");
+    const fmtN = (v, d = 1) => LANG === "de" ? v.toFixed(d).replace(".", ",") : v.toFixed(d);
     const fmtHz = (f) => f >= 1000 ? `${fmtN(f / 1000, f >= 10000 ? 0 : 1)} kHz` : `${fmtN(f, f < 100 ? 1 : 0)} Hz`;
     const pad = (n) => String(n).padStart(2, "0");
     const clock = (s) => `${pad(Math.floor(s / 60))}:${pad(Math.floor(s % 60))}`;
 
     const SCHEMA = [
-      { title: "Bewegung", items: [
-        { k: "dir", label: "Richtung", t: "seg", opts: [[1, "aufwärts"], [-1, "abwärts"], [0, "pendelnd"]], def: 1 },
-        { k: "secPerOct", label: "Zeit pro Oktave", t: "range", min: 0.5, max: 240, log: true, def: 12, f: (v) => `${fmtN(v, v < 10 ? 1 : 0)} s` },
-        { k: "pendel", label: "Pendelperiode", t: "range", min: 5, max: 600, log: true, def: 60, f: (v) => `${fmtN(v, 0)} s`, needs: (s) => s.dir === 0 },
-        { k: "steps", label: "Stufen pro Oktave", t: "range", min: 0, max: 24, step: 1, def: 0, f: (v) => v === 0 ? "gleitend" : `${v}` },
-        { k: "glide", label: "Stufenübergang", t: "range", min: 2, max: 100, step: 1, def: 35, f: (v) => `${v} %`, needs: (s) => s.steps >= 1 },
-        { k: "accel", label: "Beschleunigung", t: "range", min: -50, max: 100, step: 1, def: 0, f: (v) => `${v > 0 ? "+" : ""}${v} %/min` },
-        { k: "tmDepth", label: "Tempo-Schwingung, Tiefe", t: "range", min: 0, max: 90, step: 1, def: 0, f: (v) => `${v} %` },
-        { k: "tmPeriod", label: "Tempo-Schwingung, Periode", t: "range", min: 2, max: 120, log: true, def: 20, f: (v) => `${fmtN(v, 0)} s`, needs: (s) => s.tmDepth > 0 },
+      { title: L("Motion", "Bewegung"), items: [
+        { k: "dir", label: L("Direction", "Richtung"), t: "seg", opts: [[1, L("up", "aufwärts")], [-1, L("down", "abwärts")], [0, L("swing", "pendelnd")]], def: 1 },
+        { k: "secPerOct", label: L("Time per octave", "Zeit pro Oktave"), t: "range", min: 0.5, max: 240, log: true, def: 12, f: (v) => `${fmtN(v, v < 10 ? 1 : 0)} s` },
+        { k: "pendel", label: L("Swing period", "Pendelperiode"), t: "range", min: 5, max: 600, log: true, def: 60, f: (v) => `${fmtN(v, 0)} s`, needs: (s) => s.dir === 0 },
+        { k: "steps", label: L("Steps per octave", "Stufen pro Oktave"), t: "range", min: 0, max: 24, step: 1, def: 0, f: (v) => v === 0 ? L("gliding", "gleitend") : `${v}` },
+        { k: "glide", label: L("Step transition", "Stufenübergang"), t: "range", min: 2, max: 100, step: 1, def: 35, f: (v) => `${v} %`, needs: (s) => s.steps >= 1 },
+        { k: "accel", label: L("Acceleration", "Beschleunigung"), t: "range", min: -50, max: 100, step: 1, def: 0, f: (v) => `${v > 0 ? "+" : ""}${v} %/min` },
+        { k: "tmDepth", label: L("Tempo swing, depth", "Tempo-Schwingung, Tiefe"), t: "range", min: 0, max: 90, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "tmPeriod", label: L("Tempo swing, period", "Tempo-Schwingung, Periode"), t: "range", min: 2, max: 120, log: true, def: 20, f: (v) => `${fmtN(v, 0)} s`, needs: (s) => s.tmDepth > 0 },
       ] },
-      { title: "Struktur", items: [
-        { k: "n", label: "Komponenten", t: "range", min: 1, max: 24, step: 1, def: 8, f: (v) => `${v}` },
-        { k: "spacing", label: "Abstand", t: "range", min: 100, max: 2400, step: 1, def: 1200, f: (v) => `${v} ct`,
-          chips: [["Oktave", 1200], ["Quinte", 702], ["Quarte", 498], ["Terz", 386], ["Ganzton", 200], ["Halbton", 100]] },
-        { k: "fc", label: "Zentrum", t: "range", min: 40, max: 4000, log: true, def: 440, f: fmtHz },
-        { k: "env", label: "Hüllkurve", t: "select", opts: [[0, "Hann"], [1, "Gauß"], [2, "Dreieck"], [3, "Plateau"]], def: 0 },
-        { k: "shape", label: "Form der Hüllkurve", t: "range", min: 5, max: 100, step: 1, def: 50, f: (v) => `${v} %`, needs: (s) => s.env === 1 || s.env === 3 },
-        { k: "tilt", label: "Neigung", t: "range", min: -12, max: 12, step: 0.5, def: 0, f: (v) => `${v > 0 ? "+" : ""}${fmtN(v, 1)} dB/Okt` },
+      { title: L("Structure", "Struktur"), items: [
+        { k: "n", label: L("Components", "Komponenten"), t: "range", min: 1, max: 24, step: 1, def: 8, f: (v) => `${v}` },
+        { k: "spacing", label: L("Spacing", "Abstand"), t: "range", min: 100, max: 2400, step: 1, def: 1200, f: (v) => `${v} ct`,
+          chips: [[L("Octave", "Oktave"), 1200], [L("Fifth", "Quinte"), 702], [L("Fourth", "Quarte"), 498], [L("Third", "Terz"), 386], [L("Whole tone", "Ganzton"), 200], [L("Semitone", "Halbton"), 100]] },
+        { k: "fc", label: L("Center", "Zentrum"), t: "range", min: 40, max: 4000, log: true, def: 440, f: fmtHz },
+        { k: "env", label: L("Envelope", "Hüllkurve"), t: "select", opts: [[0, "Hann"], [1, L("Gauss", "Gauß")], [2, L("Triangle", "Dreieck")], [3, "Plateau"]], def: 0 },
+        { k: "shape", label: L("Envelope shape", "Form der Hüllkurve"), t: "range", min: 5, max: 100, step: 1, def: 50, f: (v) => `${v} %`, needs: (s) => s.env === 1 || s.env === 3 },
+        { k: "tilt", label: L("Tilt", "Neigung"), t: "range", min: -12, max: 12, step: 0.5, def: 0, f: (v) => `${v > 0 ? "+" : ""}${fmtN(v, 1)} ${L("dB/oct", "dB/Okt")}` },
         { info: "struct" },
       ] },
-      { title: "Klang", items: [
-        { k: "wave", label: "Klangfarbe", t: "select", opts: [[0, "Sinus"], [1, "ungerade Obertöne"], [2, "alle Obertöne"]], def: 0 },
-        { k: "harm", label: "Obertöne", t: "range", min: 1, max: 8, step: 1, def: 4, f: (v) => `${v}`, needs: (s) => s.wave > 0 },
-        { k: "rolloff", label: "Oberton-Abfall", t: "range", min: 0, max: 3, step: 0.1, def: 1.5, f: (v) => `1/h^${fmtN(v, 1)}`, needs: (s) => s.wave > 0 },
-        { k: "binaural", label: "Binauraler Beat", t: "range", min: 0, max: 40, step: 0.1, def: 0, f: (v) => v === 0 ? "aus" : `${fmtN(v, 1)} Hz` },
-        { k: "tremRate", label: "Tremolo, Rate", t: "range", min: 0, max: 30, step: 0.1, def: 0, f: (v) => `${fmtN(v, 1)} Hz` },
-        { k: "tremDepth", label: "Tremolo, Tiefe", t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
-        { k: "tremPhase", label: "Tremolo, Phase L/R", t: "range", min: 0, max: 180, step: 1, def: 0, f: (v) => `${v}°`, needs: (s) => s.tremDepth > 0 },
+      { title: L("Sound", "Klang"), items: [
+        { k: "wave", label: L("Waveform", "Klangfarbe"), t: "select", opts: [[0, L("Sine", "Sinus")], [1, L("Odd harmonics", "ungerade Obertöne")], [2, L("All harmonics", "alle Obertöne")]], def: 0 },
+        { k: "harm", label: L("Harmonics", "Obertöne"), t: "range", min: 1, max: 8, step: 1, def: 4, f: (v) => `${v}`, needs: (s) => s.wave > 0 },
+        { k: "rolloff", label: L("Harmonic rolloff", "Oberton-Abfall"), t: "range", min: 0, max: 3, step: 0.1, def: 1.5, f: (v) => `1/h^${fmtN(v, 1)}`, needs: (s) => s.wave > 0 },
+        { k: "binaural", label: L("Binaural beat", "Binauraler Beat"), t: "range", min: 0, max: 40, step: 0.1, def: 0, f: (v) => v === 0 ? L("off", "aus") : `${fmtN(v, 1)} Hz` },
+        { k: "tremRate", label: L("Tremolo, rate", "Tremolo, Rate"), t: "range", min: 0, max: 30, step: 0.1, def: 0, f: (v) => `${fmtN(v, 1)} Hz` },
+        { k: "tremDepth", label: L("Tremolo, depth", "Tremolo, Tiefe"), t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "tremPhase", label: L("Tremolo, phase L/R", "Tremolo, Phase L/R"), t: "range", min: 0, max: 180, step: 1, def: 0, f: (v) => `${v}°`, needs: (s) => s.tremDepth > 0 },
       ] },
-      { title: "Raum und Mix", items: [
-        { k: "spread", label: "Panorama nach Tonhöhe", t: "range", min: -100, max: 100, step: 1, def: 0, f: (v) => v === 0 ? "mittig" : v > 0 ? `tief links, ${v} %` : `tief rechts, ${-v} %` },
-        { k: "apRate", label: "Auto-Pan, Rate", t: "range", min: 0, max: 2, step: 0.01, def: 0, f: (v) => `${fmtN(v, 2)} Hz` },
-        { k: "apDepth", label: "Auto-Pan, Tiefe", t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
-        { k: "noise", label: "Rosa Rauschen", t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
-        { k: "hall", label: "Hall, Anteil", t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
-        { k: "hallLen", label: "Hall, Länge", t: "range", min: 0.5, max: 8, step: 0.1, def: 3, f: (v) => `${fmtN(v, 1)} s`, needs: (s) => s.hall > 0 },
-        { k: "hp", label: "Hochpass", t: "range", min: 20, max: 2000, log: true, def: 20, f: fmtHz },
-        { k: "lp", label: "Tiefpass", t: "range", min: 500, max: 20000, log: true, def: 20000, f: fmtHz },
+      { title: L("Space and mix", "Raum und Mix"), items: [
+        { k: "spread", label: L("Pan by pitch", "Panorama nach Tonhöhe"), t: "range", min: -100, max: 100, step: 1, def: 0,
+          f: (v) => v === 0 ? L("center", "mittig") : v > 0 ? `${L("low left", "tief links")}, ${v} %` : `${L("low right", "tief rechts")}, ${-v} %` },
+        { k: "apRate", label: L("Auto-pan, rate", "Auto-Pan, Rate"), t: "range", min: 0, max: 2, step: 0.01, def: 0, f: (v) => `${fmtN(v, 2)} Hz` },
+        { k: "apDepth", label: L("Auto-pan, depth", "Auto-Pan, Tiefe"), t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "noise", label: L("Pink noise", "Rosa Rauschen"), t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "hall", label: L("Reverb, mix", "Hall, Anteil"), t: "range", min: 0, max: 100, step: 1, def: 0, f: (v) => `${v} %` },
+        { k: "hallLen", label: L("Reverb, length", "Hall, Länge"), t: "range", min: 0.5, max: 8, step: 0.1, def: 3, f: (v) => `${fmtN(v, 1)} s`, needs: (s) => s.hall > 0 },
+        { k: "hp", label: L("High-pass", "Hochpass"), t: "range", min: 20, max: 2000, log: true, def: 20, f: fmtHz },
+        { k: "lp", label: L("Low-pass", "Tiefpass"), t: "range", min: 500, max: 20000, log: true, def: 20000, f: fmtHz },
       ] },
-      { title: "Sitzung und Anzeige", items: [
-        { k: "dur", label: "Dauer", t: "range", min: 0, max: 180, step: 1, def: 0, f: (v) => v === 0 ? "unbegrenzt" : `${v} min` },
-        { k: "fadeIn", label: "Einblenden", t: "range", min: 0, max: 60, step: 1, def: 4, f: (v) => `${v} s` },
-        { k: "fadeOut", label: "Ausblenden", t: "range", min: 0, max: 60, step: 1, def: 4, f: (v) => `${v} s` },
-        { k: "view", label: "Ansicht", t: "seg", opts: [["model", "Modell"], ["fft", "Analyzer"]], def: "model" },
-        { k: "win", label: "Zeitfenster", t: "range", min: 10, max: 180, log: true, def: 40, f: (v) => `${fmtN(v, 0)} s` },
+      { title: L("Session and display", "Sitzung und Anzeige"), items: [
+        { k: "dur", label: L("Duration", "Dauer"), t: "range", min: 0, max: 180, step: 1, def: 0, f: (v) => v === 0 ? L("unlimited", "unbegrenzt") : `${v} min` },
+        { k: "fadeIn", label: L("Fade in", "Einblenden"), t: "range", min: 0, max: 60, step: 1, def: 4, f: (v) => `${v} s` },
+        { k: "fadeOut", label: L("Fade out", "Ausblenden"), t: "range", min: 0, max: 60, step: 1, def: 4, f: (v) => `${v} s` },
+        { k: "view", label: L("View", "Ansicht"), t: "seg", opts: [["model", L("Model", "Modell")], ["fft", "Analyzer"]], def: "model" },
+        { k: "win", label: L("Time window", "Zeitfenster"), t: "range", min: 10, max: 180, log: true, def: 40, f: (v) => `${fmtN(v, 0)} s` },
       ] },
     ];
-    const MASTER = { k: "master", label: "Lautstärke", t: "range", min: -60, max: 0, step: 1, def: -18, f: (v) => v <= -60 ? "aus" : `${v} dB` };
+    const MASTER = { k: "master", label: L("Volume", "Lautstärke"), t: "range", min: -60, max: 0, step: 1, def: -18, f: (v) => v <= -60 ? L("off", "aus") : `${v} dB` };
 
     const ITEMS = [...SCHEMA.flatMap((g) => g.items.filter((i) => i.k)), MASTER];
     const DEF = Object.fromEntries(ITEMS.map((i) => [i.k, i.def]));
@@ -630,11 +865,11 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
 
     const PRESETS = [
       ["Shepard-Risset", { dir: 1, secPerOct: 10, n: 8, spacing: 1200, fc: 500, env: 0 }],
-      ["Abwärts-Drone", { dir: -1, secPerOct: 24, n: 6, fc: 150, env: 1, shape: 50, tilt: -3, hall: 35, hallLen: 4.5, lp: 6000 }],
+      [L("Falling drone", "Abwärts-Drone"), { dir: -1, secPerOct: 24, n: 6, fc: 150, env: 1, shape: 50, tilt: -3, hall: 35, hallLen: 4.5, lp: 6000 }],
       ["Riser", { dir: 1, secPerOct: 6, accel: 35, n: 10, fc: 700, wave: 2, harm: 5, rolloff: 1.6, hall: 25, hallLen: 2.5, lp: 9000 }],
-      ["Shepard-Skala", { dir: 1, secPerOct: 6, steps: 12, glide: 8, n: 8, fc: 500 }],
+      [L("Shepard scale", "Shepard-Skala"), { dir: 1, secPerOct: 6, steps: 12, glide: 8, n: 8, fc: 500 }],
       ["Trance", { dir: 1, secPerOct: 40, n: 8, fc: 220, binaural: 6, noise: 3, spread: 60, apRate: 0.05, apDepth: 40, hall: 30, hallLen: 5, lp: 7000 }],
-      ["Pendel", { dir: 0, pendel: 90, secPerOct: 12, n: 8, fc: 330, hall: 20 }],
+      [L("Pendulum", "Pendel"), { dir: 0, pendel: 90, secPerOct: 12, n: 8, fc: 330, hall: 20 }],
     ];
 
     const STORE = "open-helix-v1";
@@ -642,10 +877,10 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
       try {
         const saved = JSON.parse(localStorage.getItem(STORE) || "{}");
         for (const k of Object.keys(DEF)) if (typeof saved[k] === typeof DEF[k]) S[k] = saved[k];
-      } catch { /* Speicher nicht verfügbar, Defaults gelten */ }
+      } catch { /* storage unavailable, the defaults apply */ }
     }
     function save() {
-      try { localStorage.setItem(STORE, JSON.stringify(S)); } catch { /* egal */ }
+      try { localStorage.setItem(STORE, JSON.stringify(S)); } catch { /* ignore */ }
     }
 
     function engineParams() {
@@ -660,7 +895,7 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
     }
 
     // ---------------------------------------------------------------------
-    // UI aus dem Schema
+    // Interface from the schema
 
     const ctl = {};
 
@@ -740,7 +975,7 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
         b.addEventListener("click", () => applyPreset(vals));
         row.append(b);
       }
-      const reset = el("button", { type: "button", class: "chip" }, "Zurücksetzen");
+      const reset = el("button", { type: "button", class: "chip" }, L("Reset", "Zurücksetzen"));
       reset.addEventListener("click", () => applyPreset({}));
       row.append(reset);
     }
@@ -766,7 +1001,7 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
     }
 
     // ---------------------------------------------------------------------
-    // Abgeleitete Größen
+    // Derived quantities
 
     const geo = { sp: 1, span: 8, lo: 0, hi: 0 };
     const envP = { env: 0, shape: 0.5 };
@@ -780,15 +1015,18 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
       geo.lo = half - geo.span / 2;
       geo.hi = half + geo.span / 2;
       const flo = Math.pow(2, geo.lo), fhi = Math.pow(2, geo.hi);
-      $("info-struct").textContent = `Spanne ${fmtHz(flo)} bis ${fmtHz(fhi)}, Muster wiederholt sich nach ${fmtN(geo.sp * S.secPerOct, 1)} s.`;
-      $("hud-range").textContent = `${fmtHz(Math.max(20, flo))} bis ${fmtHz(Math.min(20000, fhi))}`;
+      const cycle = fmtN(geo.sp * S.secPerOct, 1);
+      $("info-struct").textContent = L(
+        `Range ${fmtHz(flo)} to ${fmtHz(fhi)}, the pattern repeats after ${cycle} s.`,
+        `Spanne ${fmtHz(flo)} bis ${fmtHz(fhi)}, Muster wiederholt sich nach ${cycle} s.`);
+      $("hud-range").textContent = `${fmtHz(Math.max(20, flo))} ${L("to", "bis")} ${fmtHz(Math.min(20000, fhi))}`;
     }
 
     // ---------------------------------------------------------------------
     // Audio
 
     const A = { ctx: null, node: null, proc: null, engine: null, fade: null, master: null, hp: null, lp: null,
-      dry: null, wet: null, conv: null, an: null, carrier: null, el: null, route: "", t0: 0, fading: false, irTimer: 0, timer: 0 };
+      dry: null, wet: null, conv: null, an: null, carrier: null, el: null, route: "", mode: "", rate: 0, t0: 0, fading: false, timer: 0 };
     const run = { playing: false, paused: false, starting: false };
     let lastState = { g: 0, t: 0, rate: 0 };
 
@@ -820,11 +1058,11 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
       return new Blob([view], { type: "audio/wav" });
     }
 
-    // iOS: Web Audio hängt sonst in der Ambient-Session, die der Stumm-Schalter
-    // mutet. Drei Schichten: (1) Audio-Session auf "playback" (Safari ab 16.4),
-    // (2) der Ausgang läuft als Medienelement statt direkt über ctx.destination,
-    // das ist die Kategorie, die der Schalter nicht stummt, (3) als Rückfall ein
-    // stilles Träger-Element.
+    // iOS otherwise puts Web Audio in the ambient session, which the silent
+    // switch mutes. Three layers: (1) the audio session set to "playback"
+    // (Safari 16.4 and later), (2) the output played through a media element
+    // instead of ctx.destination, the category the switch does not mute, (3) as
+    // a fallback, a silent looping carrier element.
     const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
@@ -847,8 +1085,14 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
       if (A.el) A.el.pause();
     }
 
+    function renderEngine() {
+      if (!A.mode) { $("engine").textContent = L("Engine: not started.", "Engine: nicht gestartet."); return; }
+      const route = A.route === "element" ? L("media element", "Medienelement") : L("direct", "direkt");
+      $("engine").textContent = `Engine: ${A.mode}, ${A.rate} Hz, ${L("output", "Ausgang")}: ${route}.`;
+    }
+
     function routeOutput(ac) {
-      const direct = () => { A.fade.connect(ac.destination); A.route = "direkt"; };
+      const direct = () => { A.fade.connect(ac.destination); A.route = "direct"; };
       if (!IOS || !ac.createMediaStreamDestination) { direct(); return; }
       try {
         const dest = ac.createMediaStreamDestination();
@@ -857,20 +1101,20 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
         el.setAttribute("playsinline", "");
         el.srcObject = dest.stream;
         A.el = el;
-        A.route = "Medienelement";
+        A.route = "element";
         el.play().catch(() => {
-          try { A.fade.disconnect(dest); } catch { /* egal */ }
+          try { A.fade.disconnect(dest); } catch { /* ignore */ }
           A.el = null;
           direct();
           startCarrier();
-          $("engine").textContent = $("engine").textContent.replace("Medienelement", "direkt");
+          renderEngine();
         });
       } catch { direct(); startCarrier(); }
     }
 
     async function startAudio() {
       const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) throw new Error("Web Audio nicht verfügbar");
+      if (!AC) throw new Error(L("Web Audio is not available", "Web Audio nicht verfügbar"));
       let ac;
       try { ac = new AC({ latencyHint: "playback" }); } catch { ac = new AC(); }
       A.ctx = ac;
@@ -912,9 +1156,11 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
           lastState = A.engine.state();
         };
         A.proc.connect(A.hp);
-        mode = "ScriptProcessor (Fallback)";
+        mode = "ScriptProcessor (fallback)";
       }
-      $("engine").textContent = `Engine: ${mode}, ${Math.round(ac.sampleRate)} Hz, Ausgang: ${A.route}`;
+      A.mode = mode;
+      A.rate = Math.round(ac.sampleRate);
+      renderEngine();
       applyGraph();
       prepFFT();
     }
@@ -944,7 +1190,7 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
         A.fade.gain.cancelScheduledValues(t);
         A.fade.gain.setValueAtTime(A.fade.gain.value, t);
         A.fade.gain.linearRampToValueAtTime(0, t + 0.3);
-      } catch { /* Kontext schon zu */ }
+      } catch { /* context already closed */ }
       const proc = A.proc, node = A.node, el = A.el;
       A.el = null;
       setTimeout(() => {
@@ -964,7 +1210,7 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
       $("btn-play").disabled = run.playing || run.starting;
       $("btn-pause").disabled = !run.playing;
       $("btn-stop").disabled = !run.playing && !run.paused;
-      $("btn-play").textContent = run.paused ? "Weiter" : "Start";
+      $("btn-play").textContent = run.paused ? L("Resume", "Weiter") : "Start";
     }
 
     function elapsed() { return A.ctx ? A.ctx.currentTime - A.t0 : 0; }
@@ -982,7 +1228,7 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
       try {
         if (!run.paused) {
           run.starting = true;
-          setState("Startet");
+          setState(L("Starting", "Startet"));
           await startAudio();
           run.starting = false;
           A.t0 = A.ctx.currentTime;
@@ -997,13 +1243,14 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
         }
       } catch (err) {
         run.starting = false;
-        setState("Fehler");
-        $("engine").textContent = "Engine: " + (err && err.message ? err.message : "Start fehlgeschlagen");
+        setState(L("Error", "Fehler"));
+        A.mode = "";
+        $("engine").textContent = "Engine: " + (err && err.message ? err.message : L("start failed", "Start fehlgeschlagen"));
         return;
       }
       run.playing = true;
       run.paused = false;
-      setState("Läuft");
+      setState(L("Running", "Läuft"));
       clearInterval(A.timer);
       A.timer = setInterval(tick, 200);
       last = performance.now();
@@ -1016,10 +1263,10 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
       run.paused = true;
       if (A.ctx) A.ctx.suspend();
       releasePlayback();
-      setState("Pausiert");
+      setState(L("Paused", "Pausiert"));
     }
 
-    function stop(label = "Bereit") {
+    function stop(label = L("Ready", "Bereit")) {
       run.playing = false;
       run.paused = false;
       run.starting = false;
@@ -1044,11 +1291,11 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
         A.fade.gain.setValueAtTime(A.fade.gain.value, t);
         A.fade.gain.linearRampToValueAtTime(0, t + Math.max(0.05, total - e));
       }
-      if (e >= total) stop("Beendet");
+      if (e >= total) stop(L("Finished", "Beendet"));
     }
 
     // ---------------------------------------------------------------------
-    // Zeichnen
+    // Drawing
 
     const spec = $("spec"), axis = $("axis"), envc = $("envc");
     const sctx = spec.getContext("2d"), actx = axis.getContext("2d"), ectx = envc.getContext("2d");
@@ -1125,11 +1372,11 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
         actx.globalAlpha = 0.6;
         actx.beginPath(); actx.moveTo(0, y); actx.lineTo(W, y); actx.stroke();
         actx.globalAlpha = 1;
-        actx.fillText(f >= 1000 ? `${f / 1000} k` : `${f}`, W - 5 * dpr, y - 2 * dpr);
+        actx.fillText(f >= 1000 ? `${fmtN(f / 1000, f % 1000 ? 1 : 0)} k` : `${f}`, W - 5 * dpr, y - 2 * dpr);
       }
       actx.textAlign = "left";
       actx.textBaseline = "bottom";
-      actx.fillText(`vor ${Math.round(S.win)} s`, 6 * dpr, H - 5 * dpr);
+      actx.fillText(L(`${Math.round(S.win)} s ago`, `vor ${Math.round(S.win)} s`), 6 * dpr, H - 5 * dpr);
     }
 
     function shiftSpec(ix) {
@@ -1284,12 +1531,12 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
       if (now - hudAt > 100) {
         hudAt = now;
         const r = lastState.rate;
-        $("hud-rate").textContent = `${r >= 0 ? "aufwärts" : "abwärts"} ${fmtN(Math.abs(r) * 1200, 0)} ct/s`;
+        $("hud-rate").textContent = `${r >= 0 ? L("rising", "aufwärts") : L("falling", "abwärts")} ${fmtN(Math.abs(r) * 1200, 0)} ct/s`;
       }
     }
 
     // ---------------------------------------------------------------------
-    // Änderungen
+    // Changes
 
     const VIEW_KEYS = new Set(["n", "spacing", "fc", "win", "view", "*"]);
     let irTimer = 0;
@@ -1324,11 +1571,17 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
     // ---------------------------------------------------------------------
     // Start
 
+    $("spec").setAttribute("aria-label", L(
+      "Spectrogram: frequency on a logarithmic scale from bottom to top, time from left to right",
+      "Spektrogramm: Frequenz logarithmisch von unten nach oben, Zeit von links nach rechts"));
+    $("envc").setAttribute("aria-label", L("Envelope with the current components", "Hüllkurve mit den aktuellen Komponenten"));
+    $("hud-rate").textContent = L("rising", "aufwärts");
+    renderEngine();
     load();
     buildUI();
     syncUI();
     derive();
-    setState("Bereit");
+    setState(L("Ready", "Bereit"));
     renderClock();
 
     $("btn-play").addEventListener("click", play);
@@ -1343,8 +1596,6 @@ registerProcessor('helix', class extends AudioWorkletProcessor {
     if (window.ResizeObserver) new ResizeObserver(layout).observe($("session").querySelector(".viz"));
     window.addEventListener("resize", layout);
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { pal = null; clearSpec(); drawAxis(); drawIdle(); });
-    new MutationObserver(() => { pal = null; clearSpec(); drawAxis(); drawIdle(); })
-      .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     view = viewRange();
     layout();
